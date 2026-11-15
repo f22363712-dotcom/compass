@@ -1,0 +1,205 @@
+[
+  {
+    "id": "dogfood-readme-goal",
+    "session_id": "dogfood-doc-origin",
+    "author": "owner-dev",
+    "kind": "user_message",
+    "content": "为写代码的 AI 注入不可篡改的事实罗盘与注意力航向。打造纯 Python 标准库、零第三方运行时依赖的本地优先协作证据看板，明确区分个人提议与负责人确认的团队共识。",
+    "observed_at": "2026-11-04T08:30:00+00:00",
+    "metadata": {
+      "member_id": "owner-dev",
+      "source_ref": "README.md",
+      "facts": [
+        {
+          "kind": "goal",
+          "subject_key": "project.goal",
+          "value": "打造纯 Python 标准库、零第三方运行时依赖的 Coding Agent 协作证据看板",
+          "quote": "打造纯 Python 标准库、零第三方运行时依赖的本地优先协作证据看板，明确区分个人提议与负责人确认的团队共识。",
+          "claim_type": "user_statement"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-retire-sponsors",
+    "session_id": "dogfood-arch-m1",
+    "author": "owner-dev",
+    "kind": "user_message",
+    "content": "决定放弃竞赛期外部重依赖模块（zetaris_provider、meterless_memory、jev_provider），保持 Project Compass 1.0 纯 Python 标准库 + 本地原子持久化账本与零打包器 Web UI。",
+    "observed_at": "2026-11-04T10:15:00+00:00",
+    "metadata": {
+      "member_id": "owner-dev",
+      "source_ref": "DECISIONS.md",
+      "facts": [
+        {
+          "kind": "decision",
+          "subject_key": "arch.sponsor_modules",
+          "value": "决定放弃竞赛期外部重依赖模块（zetaris_provider、meterless_memory、jev_provider），保持纯 Python 标准库",
+          "quote": "决定放弃竞赛期外部重依赖模块（zetaris_provider、meterless_memory、jev_provider），保持 Project Compass 1.0 纯 Python 标准库 + 本地原子持久化账本与零打包器 Web UI。",
+          "claim_type": "user_statement"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-retrieval-alpha",
+    "session_id": "m2-retrieval-alpha",
+    "author": "codex-alpha",
+    "kind": "assistant_message",
+    "content": "候选方案 Alpha：继续保留纯 Python 2-gram IDF 词面重叠检索。在 easy-course-picker 基准 L3 上实测 retrieval_hit_rate 为 0.2857，retrieval_mrr 为 0.2321。",
+    "observed_at": "2026-11-14T04:10:00+00:00",
+    "metadata": {
+      "member_id": "session-alpha",
+      "source_ref": "docs/RETRIEVAL_AB_TEST_AND_REVIEW_2026-11-14.md",
+      "facts": [
+        {
+          "kind": "decision",
+          "subject_key": "arch.retriever_backend",
+          "value": "方案 Alpha：保留纯 Python 2-gram IDF 重叠打分（L3 Hit Rate 0.2857）",
+          "quote": "继续保留纯 Python 2-gram IDF 词面重叠检索。在 easy-course-picker 基准 L3 上实测 retrieval_hit_rate 为 0.2857，retrieval_mrr 为 0.2321。",
+          "claim_type": "assistant_report"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-retrieval-beta-test",
+    "session_id": "m2-retrieval-beta",
+    "author": "codex-beta",
+    "kind": "test_result",
+    "content": "方案 Beta 实测结果：采用 Python 标准库 SQLite :memory: FTS5 Trigram BM25 + 异常自动降级，L3 retrieval_hit_rate 提升至 0.3571，MRR 提升至 0.2560，全套单元测试通过 (exit_code=0)。",
+    "observed_at": "2026-11-14T05:20:00+00:00",
+    "metadata": {
+      "member_id": "session-beta",
+      "source_ref": "docs/RETRIEVAL_AB_TEST_AND_REVIEW_2026-11-14.md",
+      "exit_code": 0,
+      "facts": [
+        {
+          "kind": "decision",
+          "subject_key": "arch.retriever_backend",
+          "value": "方案 Beta：采用标准库 SQLite :memory: FTS5 Trigram BM25 + 自动降级（L3 Hit Rate 0.3571）",
+          "quote": "采用 Python 标准库 SQLite :memory: FTS5 Trigram BM25 + 异常自动降级，L3 retrieval_hit_rate 提升至 0.3571，MRR 提升至 0.2560，全套单元测试通过 (exit_code=0)。",
+          "claim_type": "execution_record"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-ui-alpha",
+    "session_id": "m3-ui-alpha",
+    "author": "agent-alpha",
+    "kind": "assistant_message",
+    "content": "UI 方案 Alpha：紧凑型瑞士印刷台账网格，3 位独立盲审评委给出平均分 4.87/10，认为顶部指标带与证据列表之间层次区分不足。",
+    "observed_at": "2026-11-14T09:15:00+00:00",
+    "metadata": {
+      "member_id": "session-alpha",
+      "source_ref": "docs/UI_AB_TEST_AND_REVIEW_2026-11-14.md",
+      "facts": [
+        {
+          "kind": "decision",
+          "subject_key": "ui.design_system",
+          "value": "UI 方案 Alpha：紧凑命令台账布局（3 位评委盲审均值 4.87/10）",
+          "quote": "UI 方案 Alpha：紧凑型瑞士印刷台账网格，3 位独立盲审评委给出平均分 4.87/10",
+          "claim_type": "assistant_report"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-ui-beta-review",
+    "session_id": "m3-ui-beta",
+    "author": "agent-beta",
+    "kind": "test_result",
+    "content": "UI 方案 Beta（Swiss Bauhaus / Neo-Brutalism 非对称 5fr/7fr 编辑网格 + Split A-vs-B 冲突矩阵）：3 位独立盲审评委 3:0 胜出，复核达成 9.30/10，16/16 Node VM 契约测试通过。",
+    "observed_at": "2026-11-14T11:40:00+00:00",
+    "metadata": {
+      "member_id": "session-beta",
+      "source_ref": "docs/UI_AB_TEST_AND_REVIEW_2026-11-14.md",
+      "exit_code": 0,
+      "facts": [
+        {
+          "kind": "decision",
+          "subject_key": "ui.design_system",
+          "value": "UI 方案 Beta：Swiss Neo-Brutalism 5fr/7fr 非对称编辑栅格（盲审 9.30/10 · 16/16 契约通过）",
+          "quote": "UI 方案 Beta（Swiss Bauhaus / Neo-Brutalism 非对称 5fr/7fr 编辑网格 + Split A-vs-B 冲突矩阵）：3 位独立盲审评委 3:0 胜出，复核达成 9.30/10，16/16 Node VM 契约测试通过。",
+          "claim_type": "execution_record"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-m0-m1-complete",
+    "session_id": "m4-gate-verify",
+    "author": "owner-dev",
+    "kind": "test_result",
+    "content": "已完成 M0（清除虚假 100% 绿灯宣称、隔离 --sample 宿主机状态）与 M1（归档 198 篇历史文档并建立 docs/INDEX.md 零断链索引）。",
+    "observed_at": "2026-11-14T13:00:00+00:00",
+    "metadata": {
+      "member_id": "owner-dev",
+      "source_ref": "PROGRESS.md",
+      "exit_code": 0,
+      "facts": [
+        {
+          "kind": "task",
+          "subject_key": "task.health_m0_m1",
+          "value": "完成 M0 紧急止血（隔离 --sample 状态）与 M1 文档归档治理（198 篇）",
+          "quote": "已完成 M0（清除虚假 100% 绿灯宣称、隔离 --sample 宿主机状态）与 M1（归档 198 篇历史文档并建立 docs/INDEX.md 零断链索引）。",
+          "claim_type": "execution_record",
+          "task_state": "reported_complete"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-m4-tests-green",
+    "session_id": "m4-gate-verify",
+    "author": "owner-dev",
+    "kind": "test_result",
+    "content": "M4 终局定量门禁实跑：python -m unittest discover -s tests -q 全部 531 项测试通过（0 failures），node --check app.js 与 HTTP 8790 冒烟验证通过。",
+    "observed_at": "2026-11-14T16:50:00+00:00",
+    "metadata": {
+      "member_id": "owner-dev",
+      "source_ref": "docs/HEALTH_REMEDIATION_FINAL_REPORT_2026-11-14.md",
+      "exit_code": 0,
+      "facts": [
+        {
+          "kind": "task",
+          "subject_key": "task.m4_regression_gate",
+          "value": "通过 M4 全量回归验证（531 项单元测试 + 16/16 Node VM + HTTP 冒烟）",
+          "quote": "python -m unittest discover -s tests -q 全部 531 项测试通过（0 failures），node --check app.js 与 HTTP 8790 冒烟验证通过。",
+          "claim_type": "execution_record",
+          "task_state": "reported_complete"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dogfood-opensource-todo",
+    "session_id": "dogfood-opensource-prep",
+    "author": "owner-dev",
+    "kind": "user_message",
+    "content": "开源发布前仍需完成：选定根目录 LICENSE（MIT 或 Apache-2.0）、清理文档与脚本中的本机路径、对齐 README 与 MCP 零配置启动参数，并集中清除 UI 看板与导出模板中的 16 处占位符。",
+    "observed_at": "2026-11-15T01:30:00+00:00",
+    "metadata": {
+      "member_id": "owner-dev",
+      "source_ref": "docs/OPEN_SOURCE_AND_DOGFOODING_PLAN_2026-11-15.md",
+      "facts": [
+        {
+          "kind": "task",
+          "subject_key": "task.opensource_readiness",
+          "value": "完成开源前准备（补齐 LICENSE、隐私路径脱敏、MCP 零配置启动、清理 16 处 UI 占位符）",
+          "quote": "选定根目录 LICENSE（MIT 或 Apache-2.0）、清理文档与脚本中的本机路径、对齐 README 与 MCP 零配置启动参数，并集中清除 UI 看板与导出模板中的 16 处占位符。",
+          "claim_type": "user_statement",
+          "task_state": "pending"
+        },
+        {
+          "kind": "assumption",
+          "subject_key": "assumption.ui_placeholders",
+          "value": "当前看板仍存在 4 类 16 处占位符（跨项目硬编码 export 文案、空状态模板、“Codex 已连接”错位标签及双语混杂文本），需下一轮集中替换为真实绑定数据",
+          "quote": "清理 UI 看板与导出模板中的 16 处占位符。",
+          "claim_type": "user_statement"
+        }
+      ]
+    }
+  }
+]

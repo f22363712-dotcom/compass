@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 背景 -->
+    <radialGradient id="branchBg" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="60%" stop-color="#090d16"/>
+      <stop offset="100%" stop-color="#020408"/>
+    </radialGradient>
+
+    <!-- 主干代码流渐变 (蓝白流光) -->
+    <linearGradient id="mainStream" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="40%" stop-color="#3b82f6"/>
+      <stop offset="80%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <!-- 分叉分支渐变 (探索流光) -->
+    <linearGradient id="forkStream" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="70%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#a7f3d0"/>
+    </linearGradient>
+
+    <filter id="nodeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="branchShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.85"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect width="800" height="800" fill="url(#branchBg)"/>
+
+  <!-- 2. 背景中的罗盘微雷达同心圆 (保持 Compass 基因) -->
+  <g stroke="rgba(255, 255, 255, 0.04)" stroke-width="1.2">
+    <circle cx="400" cy="380" r="220" fill="none" stroke-dasharray="3 6"/>
+    <circle cx="400" cy="380" r="140" fill="none"/>
+    <line x1="180" y1="380" x2="620" y2="380" stroke-dasharray="4 8"/>
+    <line x1="400" y1="160" x2="400" y2="600" stroke-dasharray="4 8"/>
+  </g>
+
+  <!-- 3. 核心图腾：代码分叉罗盘 (Git Branch + Compass Needle) -->
+  <g filter="url(#branchShadow)">
+    
+    <!-- 垂直主干 (不可动摇的团队共识主线 · 从底部 400,560 向上贯穿至 400,200) -->
+    <path d="M 400 560 L 400 200" stroke="url(#mainStream)" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- 侧向代码分叉 (Agent 探索分支 · 从 400,430 贝塞尔曲线分叉至 520,300) -->
+    <path d="M 400 430 C 400 360, 520 380, 520 300" 
+          fill="none" 
+          stroke="url(#forkStream)" 
+          stroke-width="3.5" 
+          stroke-linecap="round"/>
+
+    <!-- 次级分叉 (另一路分支探索 · 从 400,350 曲线分叉至 300,260) -->
+    <path d="M 400 350 C 400 300, 300 320, 300 260" 
+          fill="none" 
+          stroke="rgba(147, 197, 253, 0.6)" 
+          stroke-width="2.5" 
+          stroke-linecap="round" 
+          stroke-dasharray="4 4"/>
+  </g>
+
+  <!-- 4. 具象代码提交节点与指南针箭头融合 (Commit Nodes & Arrowhead) -->
+  <g filter="url(#nodeGlow)">
+    
+    <!-- 顶部主干：化身为一枚锐利向上的指南针北向指针 (Compass Needle Head) -->
+    <polygon points="400,165 385,205 415,205" fill="#ffffff"/>
+    <polygon points="400,165 400,205 415,205" fill="#38bdf8"/>
+
+    <!-- 底部起始根节点 (Commit Node 1) -->
+    <circle cx="400" cy="560" r="12" fill="#0f172a" stroke="#3b82f6" stroke-width="3"/>
+    <circle cx="400" cy="560" r="5" fill="#ffffff"/>
+
+    <!-- 中央分叉枢纽节点 (Commit Node 2 · Triage Point) -->
+    <circle cx="400" cy="430" r="14" fill="#0f172a" stroke="#60a5fa" stroke-width="3"/>
+    <!-- 绿色的秒批通过小勾选 -->
+    <path d="M 394 430 L 398 434 L 407 425" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- 右侧已通过测试的 Agent 分支节点 (Commit Node 3) -->
+    <circle cx="520" cy="300" r="10" fill="#0f172a" stroke="#10b981" stroke-width="2.5"/>
+    <circle cx="520" cy="300" r="4" fill="#a7f3d0"/>
+
+    <!-- 左侧仍在探索中的假设节点 (Commit Node 4) -->
+    <circle cx="300" cy="260" r="8" fill="#0f172a" stroke="#93c5fd" stroke-width="2" stroke-dasharray="2 2"/>
+  </g>
+
+  <!-- 5. 底部文字 -->
+  <text x="400" y="670" 
+        text-anchor="middle" 
+        font-family="'Inter', sans-serif" 
+        font-size="24" 
+        font-weight="800" 
+        letter-spacing="4" 
+        fill="#f8fafc">TRUENORTH</text>
+        
+  <text x="400" y="700" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="11" 
+        letter-spacing="2" 
+        fill="#94a3b8">BRANCHING TRUTH &amp; CODE COMPASS</text>
+</svg>

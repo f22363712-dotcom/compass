@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "project_id": "project-1",
+  "source_ref": ".ua/knowledge-graph.json",
+  "source_fingerprint": "sha256:fixture",
+  "observed_at": "2026-11-04T09:00:00+08:00",
+  "nodes": [
+    {"id": "file:src/main.py", "kind": "file", "label": "src/main.py", "source_ref": "src/main.py"},
+    {"id": "fn:main", "kind": "function", "label": "main", "source_ref": "src/main.py", "summary": "Entry point."}
+  ],
+  "edges": [
+    {"id": "edge-1", "from_id": "file:src/main.py", "to_id": "fn:main", "kind": "contains"}
+  ]
+}

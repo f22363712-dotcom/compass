@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 背景暗光 -->
+    <radialGradient id="monoBg" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#0e1219"/>
+      <stop offset="65%" stop-color="#07080a"/>
+      <stop offset="100%" stop-color="#020304"/>
+    </radialGradient>
+
+    <!-- 黑曜石上半部单体渐变 (向左错位) -->
+    <linearGradient id="monolithTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a303c"/>
+      <stop offset="45%" stop-color="#181c24"/>
+      <stop offset="100%" stop-color="#0d0f14"/>
+    </linearGradient>
+
+    <!-- 黑曜石下半部单体渐变 (向右错位) -->
+    <linearGradient id="monolithBottom" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#222731"/>
+      <stop offset="50%" stop-color="#14171d"/>
+      <stop offset="100%" stop-color="#090a0d"/>
+    </linearGradient>
+
+    <!-- 剪切断层内部裸露的超精密光芯渐变 (480nm 冷蓝) -->
+    <linearGradient id="shearFaultCore" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="30%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#93c5fd"/>
+      <stop offset="70%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+
+    <!-- 机械导角高光 -->
+    <linearGradient id="edgeHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.4)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.03)"/>
+    </linearGradient>
+
+    <!-- 光芯辉光滤镜 -->
+    <filter id="coreGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="blockShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="36" flood-color="#000000" flood-opacity="0.9"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect width="800" height="800" fill="url(#monoBg)"/>
+
+  <!-- 2. 微弱背景网格 -->
+  <g stroke="rgba(255, 255, 255, 0.03)" stroke-width="1" stroke-dasharray="6 12">
+    <line x1="200" y1="400" x2="600" y2="400"/>
+    <line x1="400" y1="200" x2="400" y2="600"/>
+  </g>
+
+  <!-- 3. 单体错位组 -->
+  <g filter="url(#blockShadow)">
+    
+    <!-- 上半部立方体单体 (向左错位 36px) -->
+    <!-- (264, 250) 到 (494, 250) 到 (494, 388) 到 (264, 388) -->
+    <rect x="264" y="250" width="230" height="138" rx="2" 
+          fill="url(#monolithTop)" 
+          stroke="url(#edgeHighlight)" 
+          stroke-width="1.2"/>
+    
+    <!-- 下半部立方体单体 (向右错位 36px) -->
+    <!-- (306, 412) 到 (536, 412) 到 (536, 550) 到 (306, 550) -->
+    <rect x="306" y="412" width="230" height="138" rx="2" 
+          fill="url(#monolithBottom)" 
+          stroke="url(#edgeHighlight)" 
+          stroke-width="1.2"/>
+
+    <!-- 剪切断层缝隙：裸露出的高能超精密晶格光芯 (Shear Fault Core) -->
+    <!-- 高度 24px，从 x=264 一直延展至 x=536，刚好覆盖错位阶梯 -->
+    <g filter="url(#coreGlow)">
+      <rect x="284" y="388" width="232" height="24" fill="url(#shearFaultCore)" opacity="0.95"/>
+      <!-- 光芯内部极细精密晶格缝 (Sub-pixel Lattices) -->
+      <line x1="320" y1="388" x2="320" y2="412" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+      <line x1="360" y1="388" x2="360" y2="412" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+      <line x1="400" y1="388" x2="400" y2="412" stroke="#ffffff" stroke-width="1.5" opacity="0.9"/>
+      <line x1="440" y1="388" x2="440" y2="412" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+      <line x1="480" y1="388" x2="480" y2="412" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+      <!-- 中轴纯白高能光束 -->
+      <line x1="284" y1="400" x2="516" y2="400" stroke="#ffffff" stroke-width="2" opacity="0.95"/>
+    </g>
+    
+  </g>
+
+  <!-- 4. 底部文字 -->
+  <text x="400" y="670" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="14" 
+        font-weight="600" 
+        letter-spacing="6" 
+        fill="#ffffff" 
+        opacity="0.85">TELOS</text>
+        
+  <text x="400" y="694" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="10" 
+        letter-spacing="3" 
+        fill="rgba(255, 255, 255, 0.35)">THE PURPOSE ENGINE · MONOLITH SHEAR</text>
+</svg>

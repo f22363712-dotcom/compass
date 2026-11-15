@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- iOS / macOS 官方 Squircle 平滑裁切路径 -->
+    <clipPath id="squircleClip">
+      <rect x="0" y="0" width="512" height="512" rx="114" ry="114"/>
+    </clipPath>
+
+    <!-- 图标底色渐变 -->
+    <linearGradient id="iconBgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F4F4F6"/>
+    </linearGradient>
+
+    <!-- 荧光橘指针 -->
+    <linearGradient id="iconOrangeNeedle" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#EA580C"/>
+      <stop offset="60%" stop-color="#FF5500"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+
+    <!-- 柠檬黄扇区 -->
+    <linearGradient id="iconYellowCone" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="100%" stop-color="#EAB308"/>
+    </linearGradient>
+
+    <!-- 朱砂红印 -->
+    <radialGradient id="iconVermilion" cx="45%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="50%" stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#991B1B"/>
+    </radialGradient>
+
+    <!-- 纯正新野兽派硬投影 -->
+    <filter id="iconShadow" x="-15%" y="-15%" width="135%" height="135%">
+      <feDropShadow dx="8" dy="8" stdDeviation="0" flood-color="#18181B" flood-opacity="1"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 外部圆角裁切容器 (Squircle App Icon) -->
+  <g clip-path="url(#squircleClip)">
+    
+    <!-- 图标底色 -->
+    <rect width="512" height="512" fill="url(#iconBgGrad)"/>
+    
+    <!-- 极细 1px 微微内边框 -->
+    <rect width="512" height="512" fill="none" stroke="rgba(24, 24, 27, 0.08)" stroke-width="2"/>
+
+    <!-- 2. 主体色盘组 (带硬阴影) -->
+    <g filter="url(#iconShadow)">
+      
+      <!-- 底盘：深曜石黑圆 (居中于 256, 256，半径 160) -->
+      <circle cx="256" cy="256" r="160" fill="#18181B" stroke="#18181B" stroke-width="4"/>
+
+      <!-- 1/2 纯白半圆切块 (西半球) -->
+      <path d="M 256 256 L 96 256 A 160 160 0 0 1 256 96 Z" fill="#FAFAFA"/>
+      <path d="M 256 256 L 96 256 A 160 160 0 0 0 256 416 Z" fill="#F4F4F5"/>
+
+      <!-- 1/4 阳光柠檬黄扇区 (东北象限：注意力聚焦扇区) -->
+      <path d="M 256 256 L 256 96 A 160 160 0 0 1 416 256 Z" fill="url(#iconYellowCone)"/>
+
+      <!-- 内部雷达聚焦微刻度弧线 -->
+      <path d="M 256 256 L 256 176 A 80 80 0 0 1 336 256 Z" fill="none" stroke="#18181B" stroke-width="2.5" stroke-dasharray="3 4"/>
+      <circle cx="312" cy="200" r="4" fill="#18181B"/>
+    </g>
+
+    <!-- 3. 正北方向立标 (N) -->
+    <text x="256" y="76" text-anchor="middle" font-family="'Inter', sans-serif" font-size="16" font-weight="900" fill="#18181B">N</text>
+
+    <!-- 4. 核心包豪斯真北指针 (True North Needle) -->
+    <g>
+      <!-- 北针左半切面：荧光橘 -->
+      <polygon points="256,56 226,256 256,226" fill="url(#iconOrangeNeedle)" stroke="#18181B" stroke-width="3"/>
+      <!-- 北针右半切面：立体深橙 -->
+      <polygon points="256,56 256,226 286,256" fill="#EA580C" stroke="#18181B" stroke-width="3"/>
+
+      <!-- 南针稳定块：纯白配重 -->
+      <polygon points="256,360 234,256 256,274" fill="#FFFFFF" stroke="#18181B" stroke-width="3"/>
+      <polygon points="256,360 256,274 278,256" fill="#D4D4D8" stroke="#18181B" stroke-width="3"/>
+    </g>
+
+    <!-- 5. 中央朱砂真理火漆印 (The Vermilion Seal ✦) -->
+    <g>
+      <!-- 黑圈基底 -->
+      <circle cx="256" cy="256" r="30" fill="#18181B" stroke="#FAFAFA" stroke-width="3"/>
+      <!-- 朱砂红实心印 -->
+      <circle cx="256" cy="256" r="20" fill="url(#iconVermilion)"/>
+      <!-- 纯白星芒 `✦` -->
+      <text x="256" y="262" text-anchor="middle" font-family="'Inter', serif" font-size="16" font-weight="800" fill="#FFFFFF">✦</text>
+    </g>
+  </g>
+</svg>

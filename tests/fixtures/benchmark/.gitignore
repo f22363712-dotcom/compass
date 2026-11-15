@@ -1,0 +1,4 @@
+# Corpus specifications name real people, so they stay out of the repository.
+# The built corpus in this directory is de-identified and is committed.
+local-specs/
+*.local.json

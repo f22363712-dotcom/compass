@@ -1,0 +1,297 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from hashlib import sha1
+from pathlib import Path
+from typing import Any
+
+PROTOCOL_VERSION = 1
+
+
+def validate_protocol_version(value: Any) -> None:
+    if type(value) is not int or value != PROTOCOL_VERSION:
+        raise ValueError(f"unsupported ProjectCompass plugin protocol version: {value!r}")
+
+
+def _text(value: Any, name: str, limit: int) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > limit or "\x00" in value:
+        raise ValueError(f"invalid {name}")
+    return value
+
+
+@dataclass(frozen=True)
+class ProjectContext:
+    project_id: str
+    project_path: str
+    member_id: str
+    session_id: str
+    agent: str
+    schema_version: int = PROTOCOL_VERSION
+    core_goal: str | None = None
+    accepted_facts: tuple[dict[str, Any], ...] = ()
+    conflicts: tuple[dict[str, Any], ...] = ()
+    entities: tuple[dict[str, Any], ...] = ()
+    spills: tuple[dict[str, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_protocol_version(self.schema_version)
+        _text(self.project_id, "project_id", 128)
+        _text(self.project_path, "project_path", 2048)
+        _text(self.member_id, "member_id", 120)
+        _text(self.session_id, "session_id", 256)
+        _text(self.agent, "agent", 64)
+
+    def __hash__(self) -> int:
+        return hash((self.project_id, self.project_path, self.member_id, self.session_id, self.agent, self.schema_version))
+
+    @classmethod
+    def for_project(cls, project_path: str | Path, member_id: str, session_id: str, agent: str) -> "ProjectContext":
+        path = Path(project_path).expanduser().resolve()
+        project_id = sha1(str(path).encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
+        return cls(project_id, str(path), member_id, session_id, agent)
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "schema_version": self.schema_version,
+            "project_id": self.project_id,
+            "project_path": self.project_path,
+            "member_id": self.member_id,
+            "session_id": self.session_id,
+            "agent": self.agent,
+        }
+        if self.core_goal is not None:
+            data["core_goal"] = self.core_goal
+        if self.accepted_facts:
+            data["accepted_facts"] = list(self.accepted_facts)
+        if self.conflicts:
+            data["conflicts"] = list(self.conflicts)
+        if self.entities:
+            data["entities"] = list(self.entities)
+        if self.spills:
+            data["spills"] = list(self.spills)
+        return data
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ProjectContext":
+        if not isinstance(value, dict):
+            raise ValueError("project context must be an object")
+        core_goal = value.get("core_goal")
+        accepted_facts = tuple(value.get("accepted_facts", ()))
+        conflicts = tuple(value.get("conflicts", ()))
+        entities = tuple(value.get("entities", ()))
+        spills = tuple(value.get("spills", ()))
+        return cls(
+            value.get("project_id", ""),
+            value.get("project_path", ""),
+            value.get("member_id", ""),
+            value.get("session_id", ""),
+            value.get("agent", ""),
+            value.get("schema_version", 0),
+            core_goal=core_goal,
+            accepted_facts=accepted_facts,
+            conflicts=conflicts,
+            entities=entities,
+            spills=spills,
+        )
+
+
+def _format_size(byte_count: int) -> str:
+    if byte_count < 1024:
+        return f"{byte_count}B"
+    return f"{byte_count / 1024:.1f}KB"
+
+
+def build_compact_project_context(
+    context: ProjectContext,
+    state: dict[str, Any] | None = None,
+    events: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Produce an Inline & Spill compact context representation."""
+    state = state or {}
+    team = state.get("team", {})
+    team_facts = team.get("facts", [])
+
+    # 1. Inline: Core Goal
+    core_goal = ""
+    handoff_goal = state.get("handoff_brief", {}).get("goal")
+    if handoff_goal:
+        core_goal = handoff_goal
+    else:
+        for fact in team_facts:
+            if fact.get("kind") == "goal":
+                core_goal = fact.get("value") or fact.get("quote") or ""
+                break
+    if not core_goal and events:
+        for ev in events:
+            if getattr(ev, "kind", None) == "goal" or getattr(ev, "metadata", {}).get("kind") == "goal":
+                core_goal = getattr(ev, "content", "")
+                break
+    if not core_goal:
+        core_goal = "未记录核心目标"
+
+    # 2. Inline: Latest Accepted Facts (Consensus, top 3-5)
+    accepted = [fact for fact in team_facts if fact.get("status") == "accepted"]
+    if not accepted:
+        accepted = team_facts[:5]
+    else:
+        accepted = accepted[:5]
+
+    compact_accepted = [
+        {
+            "id": fact.get("id"),
+            "kind": fact.get("kind"),
+            "subject_key": fact.get("subject_key"),
+            "summary": str(fact.get("value") or fact.get("quote") or "")[:50],
+        }
+        for fact in accepted
+    ]
+
+    # 3. Inline: Pending Conflicts Summary
+    raw_conflicts = team.get("conflicts", [])
+    compact_conflicts = []
+    for c in raw_conflicts:
+        sides = c.get("sides", [])
+        sides_summary = " vs ".join(
+            f"{s.get('author')}: {str(s.get('value', ''))[:40]}" for s in sides[:2]
+        )
+        compact_c = {
+            "subject_key": c.get("subject_key"),
+            "side_count": len(sides),
+            "summary": sides_summary,
+        }
+        if "speculative_recommendation" in c:
+            compact_c["speculative_recommendation"] = c["speculative_recommendation"]
+        compact_conflicts.append(compact_c)
+
+    # 4. Inline: Entity IDs + 50-char Short Summaries
+    entities = []
+    for fact in team_facts:
+        if fact.get("kind") == "task":
+            entities.append({
+                "id": fact.get("id"),
+                "kind": "task",
+                "summary": str(fact.get("value") or "")[:50],
+            })
+            if len(entities) >= 5:
+                break
+    source_refs = state.get("derived_context", {}).get("evidence_source_refs", [])
+    for ref in source_refs[:3]:
+        entities.append({
+            "id": ref,
+            "kind": "source_ref",
+            "summary": ref[:50],
+        })
+
+    # 5. Spill: Truncate long test stacks, raw command traces, logs into pointers
+    spills = []
+    all_ev = state.get("evidence", [])
+    if not all_ev and events:
+        all_ev = [ev.to_dict() if hasattr(ev, "to_dict") else ev for ev in events]
+
+    spillable_kinds = {"test_result", "command_execution", "tool_result", "file_snapshot"}
+    for ev in all_ev:
+        ev_id = ev.get("id", "")
+        kind = ev.get("kind", "")
+        preview = ev.get("content_preview") or ev.get("content") or ""
+        content = ev.get("content") or preview
+        byte_size = len(str(content).encode("utf-8"))
+        if kind in spillable_kinds or byte_size > 150:
+            spills.append({
+                "id": ev_id,
+                "kind": kind,
+                "bytes": byte_size,
+                "pointer": f"[{ev_id}: {_format_size(byte_size)}] -> call query_state(\"{ev_id}\")",
+                "summary": str(preview)[:50].replace("\n", " ").strip(),
+            })
+
+    inline_data = {
+        "core_goal": core_goal,
+        "accepted_facts": compact_accepted,
+        "conflicts": compact_conflicts,
+        "entities": entities,
+    }
+
+    return {
+        "schema_version": context.schema_version,
+        "project_id": context.project_id,
+        "project_path": context.project_path,
+        "member_id": context.member_id,
+        "session_id": context.session_id,
+        "agent": context.agent,
+        "inline": inline_data,
+        "spills": spills,
+        "core_goal": core_goal,
+        "accepted_facts": compact_accepted,
+        "conflicts": compact_conflicts,
+        "entities": entities,
+    }
+
+
+@dataclass(frozen=True)
+class StateQuery:
+    context: ProjectContext
+    question: str
+    scopes: tuple[str, ...] = ("team", "personal", "evidence")
+
+    def __post_init__(self) -> None:
+        _text(self.question, "question", 2000)
+        if not self.scopes or any(not isinstance(scope, str) or not scope.strip() for scope in self.scopes):
+            raise ValueError("invalid state query scopes")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"schema_version": PROTOCOL_VERSION, "project_id": self.context.project_id,
+                "question": self.question, "scopes": list(self.scopes)}
+
+
+@dataclass(frozen=True)
+class FactProposal:
+    id: str
+    context: ProjectContext
+    source_id: str
+    kind: str
+    subject_key: str
+    quote: str
+    task_state: str | None = None
+
+    def __post_init__(self) -> None:
+        for value, name, limit in ((self.id, "proposal id", 128), (self.source_id, "source id", 256),
+                                   (self.kind, "fact kind", 64), (self.subject_key, "subject key", 256),
+                                   (self.quote, "quote", 48000)):
+            _text(value, name, limit)
+        if self.task_state is not None:
+            _text(self.task_state, "task state", 64)
+
+    def to_payload(self) -> dict[str, Any]:
+        proposal = {"id": self.id, "source_id": self.source_id, "kind": self.kind,
+                    "subject_key": self.subject_key, "quote": self.quote}
+        if self.task_state is not None:
+            proposal["task_state"] = self.task_state
+        return {"schema_version": PROTOCOL_VERSION, "project_id": self.context.project_id,
+                "proposals": [proposal]}
+
+
+def _event_type(kind: str) -> str:
+    allowed = {"user_message", "assistant_message", "tool_call", "tool_result", "test_result", "file_change"}
+    if kind not in allowed:
+        raise ValueError(f"unsupported plugin event type: {kind}")
+    return kind
+
+
+def _event_payload(event: Any, context: ProjectContext) -> dict[str, Any]:
+    if getattr(event, "session_id", None) != context.session_id or getattr(event, "author", None) not in {context.member_id, context.agent}:
+        raise ValueError("evidence event does not match project context")
+    observed_at = event.observed_at
+    if not isinstance(observed_at, datetime) or observed_at.tzinfo is None:
+        raise ValueError("evidence event requires a timezone-aware timestamp")
+    payload = {"id": _text(event.id, "event id", 128), "type": _event_type(event.kind),
+               "timestamp": observed_at.isoformat(), "content": _text(event.content, "event content", 48000)}
+    source_ref = getattr(event, "metadata", {}).get("source_ref")
+    if isinstance(source_ref, str) and source_ref.strip():
+        payload["source_ref"] = source_ref[:2048]
+    return payload
+
+
+def evidence_event_to_protocol_dict(event: Any, context: ProjectContext) -> dict[str, Any]:
+    return {"schema_version": PROTOCOL_VERSION, "project_id": context.project_id,
+            "event": _event_payload(event, context)}

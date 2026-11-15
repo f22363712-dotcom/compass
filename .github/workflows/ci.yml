@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "codex/**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compile-check Python sources
+        run: python -m compileall -q src tests
+
+      - name: Run Python unit and HTTP contract tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -q
+
+      - name: Check dashboard frontend syntax and Node VM contract
+        run: |
+          node --check src/project_compass/web/app.js
+          node tests/web_tool_pair_test.cjs src/project_compass/web/app.js
+
+      - name: Run 5-layer evaluation benchmark Red-Line Gate
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m project_compass.eval run \
+            --corpus tests/fixtures/benchmark/easy-course-picker \
+            --baseline tests/fixtures/benchmark/baseline_report.json

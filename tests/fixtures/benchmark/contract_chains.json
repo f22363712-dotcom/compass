@@ -1,0 +1,54 @@
+{
+  "format": "project-compass-eval-contracts",
+  "version": 1,
+  "note": "手写的爆炸半径预期，来源是阅读源码得出的真实调用点，不是从索引结果反推的。索引若漏掉其中任何一个，都是索引的缺陷而不是预期写错了。",
+  "cases": [
+    {
+      "id": "derive-facts-blast-radius",
+      "symbol": "derive_facts",
+      "source_ref": "src/project_compass/fact_engine.py",
+      "expected_caller_modules": [
+        "src/project_compass/agent_inbox.py",
+        "src/project_compass/cli.py",
+        "src/project_compass/dashboard.py",
+        "src/project_compass/directions.py",
+        "src/project_compass/evidence_linking.py",
+        "src/project_compass/investigator.py",
+        "src/project_compass/projections.py",
+        "src/project_compass/reason_preview.py",
+        "src/project_compass/user_task_intake.py"
+      ],
+      "expected_callee_modules": [],
+      "note": "事实派生是全产品的中枢：改它会同时影响看板、调查、方向投影、规则抽取和预览。"
+    },
+    {
+      "id": "build-views-blast-radius",
+      "symbol": "build_views",
+      "source_ref": "src/project_compass/projections.py",
+      "expected_caller_modules": [
+        "src/project_compass/cli.py",
+        "src/project_compass/dashboard.py"
+      ],
+      "expected_callee_modules": [
+        "src/project_compass/fact_engine.py",
+        "src/project_compass/projections.py"
+      ],
+      "note": "两层真相的视图构建入口，调用方少但每个都是对外接口。"
+    },
+    {
+      "id": "validate-candidates-blast-radius",
+      "symbol": "validate_candidates",
+      "source_ref": "src/project_compass/candidate_extraction.py",
+      "expected_caller_modules": [
+        "src/project_compass/agent_inbox.py",
+        "src/project_compass/codex_extractor.py",
+        "src/project_compass/directions.py",
+        "src/project_compass/user_task_intake.py"
+      ],
+      "expected_callee_modules": [
+        "src/project_compass/candidate_extraction.py"
+      ],
+      "note": "抽取契约的唯一闸门：任何模型抽取都必须过它。"
+    }
+  ]
+}

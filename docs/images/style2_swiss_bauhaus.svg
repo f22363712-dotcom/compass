@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 纯净现代暖白背景 -->
+    <linearGradient id="bauhausBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F4F4F5"/>
+    </linearGradient>
+
+    <!-- 日出荧光橘渐变 (Electric Orange) -->
+    <linearGradient id="orangePop" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#EA580C"/>
+      <stop offset="60%" stop-color="#FF5500"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+
+    <!-- 阳光柠檬黄 (Lemon Yellow) -->
+    <linearGradient id="yellowPop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="100%" stop-color="#EAB308"/>
+    </linearGradient>
+
+    <!-- 现代新野兽派硬投影 (Neo-Brutalist Hard Shadow) -->
+    <filter id="hardPopShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="8" dy="8" stdDeviation="0" flood-color="#18181B" flood-opacity="1"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect width="800" height="800" fill="url(#bauhausBg)"/>
+
+  <!-- 2. 背景中的瑞士国际主义极简几何网格参考线 (红白黑经典三原色点缀) -->
+  <g stroke="#E4E4E7" stroke-width="2">
+    <line x1="100" y1="380" x2="700" y2="380"/>
+    <line x1="400" y1="100" x2="400" y2="660"/>
+    <!-- 装饰性黄色实心小方块 -->
+    <rect x="180" y="240" width="16" height="16" fill="#FACC15"/>
+    <!-- 装饰性蓝色小圆点 -->
+    <circle cx="620" cy="500" r="8" fill="#3B82F6"/>
+  </g>
+
+  <!-- 3. 包豪斯核心几何色盘组合 (带硬投影) -->
+  <g filter="url(#hardPopShadow)">
+    
+    <!-- 底盘：沉稳钴黑大圆 (直径 360px) -->
+    <circle cx="400" cy="380" r="180" fill="#18181B" stroke="#18181B" stroke-width="4"/>
+
+    <!-- 内部 1/4 扇形活力切块：阳光柠檬黄切片 (象征注意力聚焦扇区) -->
+    <path d="M 400 380 L 400 200 A 180 180 0 0 1 580 380 Z" fill="url(#yellowPop)"/>
+
+    <!-- 内部 1/2 优雅半圆切片：纯净象牙白切片 -->
+    <path d="M 400 380 L 220 380 A 180 180 0 0 1 400 200 Z" fill="#FAFAFA"/>
+  </g>
+
+  <!-- 4. 【指南与代码结合】瑞士大色块粗几何罗盘北针 + 代码尖括号拼贴 -->
+  <g>
+    <!-- 正北方粗色块指针：日出荧光橘尖锥 (指向北方真理) -->
+    <polygon points="400,140 365,380 400,350" fill="url(#orangePop)" stroke="#18181B" stroke-width="3"/>
+    <polygon points="400,140 400,350 435,380" fill="#EA580C" stroke="#18181B" stroke-width="3"/>
+
+    <!-- 南方稳定配重块：纯白几何块 -->
+    <polygon points="400,480 375,380 400,395" fill="#FAFAFA" stroke="#18181B" stroke-width="3"/>
+    <polygon points="400,480 400,395 425,380" fill="#D4D4D8" stroke="#18181B" stroke-width="3"/>
+
+    <!-- 核心圆点轴心：黑心白环橙点 -->
+    <circle cx="400" cy="380" r="28" fill="#18181B" stroke="#FAFAFA" stroke-width="4"/>
+    <circle cx="400" cy="380" r="12" fill="#FF5500"/>
+  </g>
+
+  <!-- 5. 【助手与代码符号】包豪斯风格粗线代码符号 `< >` 悬浮伴随 -->
+  <g stroke="#18181B" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- 左侧代码符号 < -->
+    <polyline points="290,350 260,380 290,410"/>
+    <!-- 右侧代码符号 > -->
+    <polyline points="510,350 540,380 510,410"/>
+  </g>
+
+  <!-- 6. 底部高反差包豪斯字形排版 -->
+  <text x="400" y="660" 
+        text-anchor="middle" 
+        font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" 
+        font-size="28" 
+        font-weight="900" 
+        letter-spacing="4" 
+        fill="#18181B">COMPASS</text>
+        
+  <text x="400" y="695" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="12" 
+        font-weight="600" 
+        letter-spacing="3" 
+        fill="#FF5500">BOLD NAVIGATOR FOR CODING AGENTS</text>
+</svg>

@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "project-compass": {
+      "type": "stdio",
+      "command": "project-compass-mcp",
+      "args": [
+        "--project-path",
+        ".",
+        "--member-id",
+        "developer-a",
+        "--session-id",
+        "THREAD_UUID"
+      ],
+      "env": {
+        "PROJECT_COMPASS_BASE_URL": "http://127.0.0.1:8787",
+        "PROJECT_COMPASS_AGENT_TOKEN": "SET_IN_HOST_ENVIRONMENT"
+      }
+    }
+  }
+}

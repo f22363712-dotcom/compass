@@ -1,0 +1,10 @@
+{
+  "format": "project-compass-eval-gold",
+  "version": 1,
+  "meta": {
+    "purpose": "对抗语料没有需要抽取的事实：它只用来检验准入门",
+    "synthetic": true
+  },
+  "facts": [],
+  "questions": []
+}

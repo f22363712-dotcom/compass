@@ -1,0 +1,124 @@
+{
+  "format": "understand-anything",
+  "version": "1.0",
+  "projectId": "299f228d389f023b",
+  "entryFile": "src/project_compass/cli.py",
+  "sourceHash": "sha256:c0df81227c2603b10951af12de4eba434def4eb1ab7276668b1c9bacbf8e3a65",
+  "generatedAt": "2026-11-04T14:30:00+08:00",
+  "nodes": [
+    {
+      "id": "file:README.md",
+      "type": "file",
+      "name": "README.md",
+      "filePath": "README.md",
+      "description": "Repository overview and CLI usage contract."
+    },
+    {
+      "id": "file:src/project_compass/cli.py",
+      "type": "file",
+      "name": "src/project_compass/cli.py",
+      "filePath": "src/project_compass/cli.py",
+      "description": "Command-line entrypoint for scanning, opening and serving workspaces."
+    },
+    {
+      "id": "fn:cli.main",
+      "type": "function",
+      "name": "main",
+      "filePath": "src/project_compass/cli.py",
+      "description": "Parses CLI arguments and wires DerivedContext into run_dashboard."
+    },
+    {
+      "id": "file:src/project_compass/derived_context.py",
+      "type": "file",
+      "name": "src/project_compass/derived_context.py",
+      "filePath": "src/project_compass/derived_context.py",
+      "description": "Read-only validation and projection for code-structure context."
+    },
+    {
+      "id": "class:DerivedContext",
+      "type": "class",
+      "name": "DerivedContext",
+      "filePath": "src/project_compass/derived_context.py",
+      "description": "Immutable project-bound structure graph read model."
+    },
+    {
+      "id": "file:src/project_compass/dashboard.py",
+      "type": "file",
+      "name": "src/project_compass/dashboard.py",
+      "filePath": "src/project_compass/dashboard.py",
+      "description": "Builds personal, team and process-layer state for the web board."
+    },
+    {
+      "id": "fn:dashboard.build_dashboard_state",
+      "type": "function",
+      "name": "build_dashboard_state",
+      "filePath": "src/project_compass/dashboard.py",
+      "description": "Projects evidence, team truth and read-only derived_context."
+    },
+    {
+      "id": "file:src/project_compass/web_server.py",
+      "type": "file",
+      "name": "src/project_compass/web_server.py",
+      "filePath": "src/project_compass/web_server.py",
+      "description": "Local loopback HTTP server for ProjectCompass web board."
+    },
+    {
+      "id": "domain:structure-navigation",
+      "type": "concept",
+      "name": "Structure Navigation",
+      "filePath": "docs/DERIVED_CONTEXT_PROJECTION_SPEC.md",
+      "description": "Read-only navigation context that never promotes Team truth."
+    }
+  ],
+  "links": [
+    {
+      "id": "edge:readme-cli",
+      "source": "file:README.md",
+      "target": "file:src/project_compass/cli.py",
+      "type": "depends_on"
+    },
+    {
+      "id": "edge:cli-main",
+      "source": "file:src/project_compass/cli.py",
+      "target": "fn:cli.main",
+      "type": "defines"
+    },
+    {
+      "id": "edge:cli-imports-derived",
+      "source": "fn:cli.main",
+      "target": "class:DerivedContext",
+      "type": "invokes"
+    },
+    {
+      "id": "edge:derived-contains-class",
+      "source": "file:src/project_compass/derived_context.py",
+      "target": "class:DerivedContext",
+      "type": "defines"
+    },
+    {
+      "id": "edge:dashboard-imports-derived",
+      "source": "file:src/project_compass/dashboard.py",
+      "target": "file:src/project_compass/derived_context.py",
+      "type": "imports"
+    },
+    {
+      "id": "edge:dashboard-contains-builder",
+      "source": "file:src/project_compass/dashboard.py",
+      "target": "fn:dashboard.build_dashboard_state",
+      "type": "defines"
+    },
+    {
+      "id": "edge:webserver-calls-builder",
+      "source": "file:src/project_compass/web_server.py",
+      "target": "fn:dashboard.build_dashboard_state",
+      "type": "calls"
+    },
+    {
+      "id": "edge:derived-in-domain",
+      "source": "class:DerivedContext",
+      "target": "domain:structure-navigation",
+      "relation": "in_domain"
+    }
+  ]
+}
+

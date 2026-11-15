@@ -1,0 +1,22 @@
+{
+  "anchors": {
+    "facts": 19,
+    "questions": 14,
+    "entries": 215,
+    "events": 215
+  },
+  "deidentification": {
+    "member_count": 2,
+    "member_aliases": {
+      "member-1": 163,
+      "member-2": 229
+    },
+    "pattern_replacements": {
+      "absolute-path": 5,
+      "email": 3,
+      "home-path": 1,
+      "url": 53
+    },
+    "total_replacements": 454
+  }
+}

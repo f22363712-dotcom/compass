@@ -1,0 +1,857 @@
+{
+  "format": "project-compass-eval-report",
+  "version": 1,
+  "corpus": "easy-course-picker",
+  "generated_at": "2026-11-14T06:26:24.624451+00:00",
+  "track": {
+    "git_sha": "b130965",
+    "gold_sha256": "cebdd4ec9a79",
+    "extractor": "reference-rules-v1",
+    "answerer": "product-investigator"
+  },
+  "passed": true,
+  "red_line_passed": true,
+  "quality_grade": {
+    "score": 36.2,
+    "tier": "Tier 3 (Baseline)",
+    "quality_passed": false,
+    "metrics_counted": 4
+  },
+  "summary": {
+    "layers": 5,
+    "layers_passed": 5,
+    "hard_metrics_passed": 21,
+    "hard_metrics_total": 21,
+    "quality_score": 36.2,
+    "quality_tier": "Tier 3 (Baseline)"
+  },
+  "layers": [
+    {
+      "layer": "L1",
+      "title": "结构层：摄入、归属与两层真相",
+      "passed": true,
+      "metrics": [
+        {
+          "name": "ingest_completeness",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "438/438 条证据写入存储"
+        },
+        {
+          "name": "member_attribution",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每条证据都能定位到成员"
+        },
+        {
+          "name": "session_consistency",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "会话 ID 与成员一致"
+        },
+        {
+          "name": "evidence_owner",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每条证据都出现在其归属成员的视图里"
+        },
+        {
+          "name": "fact_isolation",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每条事实只出现在作者本人的个人视图里"
+        },
+        {
+          "name": "no_unconfirmed_promotion",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "未经人工确认的事实没有晋升为团队事实"
+        },
+        {
+          "name": "team_view_coverage",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "团队视图覆盖全部候选事实"
+        },
+        {
+          "name": "conflict_visibility",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "当前语料含 0 处冲突，属空洞通过（vacuous pass）"
+        }
+      ],
+      "details": {
+        "events": 438,
+        "stored_events": 438,
+        "duplicate_rejected": 0,
+        "members": [
+          "member-1",
+          "member-2"
+        ],
+        "facts": 223,
+        "conflicted_subjects": [],
+        "personal_members": [
+          "member-1",
+          "member-2"
+        ]
+      },
+      "notes": [
+        "本层不依赖任何模型，可直接在 CI 中运行。",
+        "成员视图只做隔离，不做语义过滤；语义精度由 L2 与 L3 负责。",
+        "vacuous_conflict_check: corpus has 0 conflicting subjects (requires multi-stance corpus for non-vacuous conflict check)."
+      ]
+    },
+    {
+      "layer": "L2",
+      "title": "抽取层：事实准召与抽取契约",
+      "passed": true,
+      "metrics": [
+        {
+          "name": "extraction_precision",
+          "value": 0.0493,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "11/223 条候选命中金标准"
+        },
+        {
+          "name": "extraction_recall",
+          "value": 0.5789,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "11/19 条金标准被找回"
+        },
+        {
+          "name": "extraction_f1",
+          "value": 0.0909,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "抽取层 F1"
+        },
+        {
+          "name": "contract_accept_rate",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "所有候选都带有原文精确引用"
+        },
+        {
+          "name": "evidence_attachment",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每条事实都挂到证据"
+        },
+        {
+          "name": "member_attribution",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每条事实都能追到成员"
+        },
+        {
+          "name": "conflict_preservation",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "当前语料含 0 处冲突，属空洞通过（vacuous pass）"
+        }
+      ],
+      "details": {
+        "extractor": "reference-rules-v1",
+        "candidates": 223,
+        "accepted_candidates": 223,
+        "rejected_candidates": 0,
+        "facts": 223,
+        "missed_gold": [
+          "ecp-fact-003",
+          "ecp-fact-004",
+          "ecp-fact-005",
+          "ecp-fact-012",
+          "ecp-fact-013",
+          "ecp-fact-015",
+          "ecp-fact-016",
+          "ecp-fact-019"
+        ],
+        "spurious_count": 212,
+        "conflicted_subjects": []
+      },
+      "notes": [
+        "vacuous_conflict_check: extracted facts contain 0 conflicting subjects."
+      ]
+    },
+    {
+      "layer": "L3",
+      "title": "交接层：检索可达性与答案质量",
+      "passed": true,
+      "metrics": [
+        {
+          "name": "evidence_coverage",
+          "value": 0.7143,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "10/14 道题的金标准证据至少被一条事实引用过"
+        },
+        {
+          "name": "retrieval_hit_rate",
+          "value": 0.3571,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "5/14 道题在前 5 条证据内命中"
+        },
+        {
+          "name": "retrieval_mrr",
+          "value": 0.256,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "命中证据的平均倒数排名"
+        },
+        {
+          "name": "answer_accuracy",
+          "value": 0.2857,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "4/14 道题答对"
+        },
+        {
+          "name": "answer_accuracy_team",
+          "value": 0.25,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "团队视角 2/8"
+        },
+        {
+          "name": "answer_accuracy_personal",
+          "value": 0.3333,
+          "threshold": 0.0,
+          "direction": "higher",
+          "hard": false,
+          "passed": true,
+          "detail": "个人视角 2/6"
+        },
+        {
+          "name": "answers_produced",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "14/14 道题给出了非空回答"
+        },
+        {
+          "name": "evidence_validity",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "答案没有引用不存在的证据"
+        }
+      ],
+      "details": {
+        "answerer": "product-investigator",
+        "questions": 14,
+        "facts": 223,
+        "retrieval": [
+          {
+            "question_id": "ecp-q-team-001",
+            "hit_at": 5,
+            "rank": 3,
+            "gold_total": 3,
+            "reciprocal_rank": 0.3333
+          },
+          {
+            "question_id": "ecp-q-team-002",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 1,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-team-003",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 1,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-team-004",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 5,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-team-005",
+            "hit_at": 5,
+            "rank": 1,
+            "gold_total": 2,
+            "reciprocal_rank": 1.0
+          },
+          {
+            "question_id": "ecp-q-team-006",
+            "hit_at": 5,
+            "rank": 1,
+            "gold_total": 7,
+            "reciprocal_rank": 1.0
+          },
+          {
+            "question_id": "ecp-q-team-007",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 4,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-team-008",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 8,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-personal-001",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 2,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-personal-002",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 2,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-personal-003",
+            "hit_at": 5,
+            "rank": 4,
+            "gold_total": 1,
+            "reciprocal_rank": 0.25
+          },
+          {
+            "question_id": "ecp-q-personal-004",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 4,
+            "reciprocal_rank": 0.0
+          },
+          {
+            "question_id": "ecp-q-personal-005",
+            "hit_at": 5,
+            "rank": 1,
+            "gold_total": 1,
+            "reciprocal_rank": 1.0
+          },
+          {
+            "question_id": "ecp-q-personal-006",
+            "hit_at": null,
+            "rank": null,
+            "gold_total": 4,
+            "reciprocal_rank": 0.0
+          }
+        ],
+        "answers": [
+          {
+            "question_id": "ecp-q-team-001",
+            "scope": "team",
+            "correct": true,
+            "covered_terms": [
+              "模拟"
+            ],
+            "missing_terms": [],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-match"
+          },
+          {
+            "question_id": "ecp-q-team-002",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "学分计算"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-team-003",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "手动提交"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-team-004",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "推进"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-team-005",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "case-002"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-team-006",
+            "scope": "team",
+            "correct": true,
+            "covered_terms": [
+              "模拟数据"
+            ],
+            "missing_terms": [],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-match"
+          },
+          {
+            "question_id": "ecp-q-team-007",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "多修学分"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-team-008",
+            "scope": "team",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "F0"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-personal-001",
+            "scope": "personal",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "case-001"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-personal-002",
+            "scope": "personal",
+            "correct": true,
+            "covered_terms": [
+              "F0"
+            ],
+            "missing_terms": [],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-match"
+          },
+          {
+            "question_id": "ecp-q-personal-003",
+            "scope": "personal",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "验收基准"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-personal-004",
+            "scope": "personal",
+            "correct": true,
+            "covered_terms": [
+              "数据"
+            ],
+            "missing_terms": [],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-match"
+          },
+          {
+            "question_id": "ecp-q-personal-005",
+            "scope": "personal",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "case-002"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          },
+          {
+            "question_id": "ecp-q-personal-006",
+            "scope": "personal",
+            "correct": false,
+            "covered_terms": [],
+            "missing_terms": [
+              "多修学分"
+            ],
+            "violated_terms": [],
+            "cited_known_evidence": true,
+            "cited_unknown_evidence": [],
+            "detail": "rule-miss"
+          }
+        ],
+        "errors": []
+      },
+      "notes": []
+    },
+    {
+      "layer": "L4",
+      "title": "契约层：调用链追踪",
+      "passed": true,
+      "metrics": [
+        {
+          "name": "symbol_locatable",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每个受测符号都能在索引里定位"
+        },
+        {
+          "name": "caller_trace_recall",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "15/15 个预期调用方被追到"
+        },
+        {
+          "name": "risk_reported",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "每个有调用方的符号都给出契约风险"
+        }
+      ],
+      "details": {
+        "cases": [
+          {
+            "case": "derive-facts-blast-radius",
+            "located": true,
+            "symbol": "derive_facts",
+            "upstream_count": 20,
+            "downstream_count": 3,
+            "expected_callers": [
+              "src/project_compass/agent_inbox.py",
+              "src/project_compass/cli.py",
+              "src/project_compass/dashboard.py",
+              "src/project_compass/directions.py",
+              "src/project_compass/evidence_linking.py",
+              "src/project_compass/investigator.py",
+              "src/project_compass/projections.py",
+              "src/project_compass/reason_preview.py",
+              "src/project_compass/user_task_intake.py"
+            ],
+            "found_callers": [
+              "src/project_compass/agent_inbox.py",
+              "src/project_compass/cli.py",
+              "src/project_compass/dashboard.py",
+              "src/project_compass/directions.py",
+              "src/project_compass/evidence_linking.py",
+              "src/project_compass/investigator.py",
+              "src/project_compass/projections.py",
+              "src/project_compass/reason_preview.py",
+              "src/project_compass/user_task_intake.py"
+            ],
+            "missing_callers": [],
+            "expected_callees": [],
+            "found_callees": [],
+            "risk_level": "high",
+            "note": "事实派生是全产品的中枢：改它会同时影响看板、调查、方向投影、规则抽取和预览。"
+          },
+          {
+            "case": "build-views-blast-radius",
+            "located": true,
+            "symbol": "build_views",
+            "upstream_count": 11,
+            "downstream_count": 13,
+            "expected_callers": [
+              "src/project_compass/cli.py",
+              "src/project_compass/dashboard.py"
+            ],
+            "found_callers": [
+              "src/project_compass/cli.py",
+              "src/project_compass/dashboard.py"
+            ],
+            "missing_callers": [],
+            "expected_callees": [
+              "src/project_compass/fact_engine.py",
+              "src/project_compass/projections.py"
+            ],
+            "found_callees": [
+              "src/project_compass/fact_engine.py",
+              "src/project_compass/projections.py"
+            ],
+            "risk_level": "high",
+            "note": "两层真相的视图构建入口，调用方少但每个都是对外接口。"
+          },
+          {
+            "case": "validate-candidates-blast-radius",
+            "located": true,
+            "symbol": "validate_candidates",
+            "upstream_count": 15,
+            "downstream_count": 6,
+            "expected_callers": [
+              "src/project_compass/agent_inbox.py",
+              "src/project_compass/codex_extractor.py",
+              "src/project_compass/directions.py",
+              "src/project_compass/user_task_intake.py"
+            ],
+            "found_callers": [
+              "src/project_compass/agent_inbox.py",
+              "src/project_compass/codex_extractor.py",
+              "src/project_compass/directions.py",
+              "src/project_compass/user_task_intake.py"
+            ],
+            "missing_callers": [],
+            "expected_callees": [
+              "src/project_compass/candidate_extraction.py"
+            ],
+            "found_callees": [
+              "src/project_compass/candidate_extraction.py"
+            ],
+            "risk_level": "high",
+            "note": "抽取契约的唯一闸门：任何模型抽取都必须过它。"
+          }
+        ],
+        "nodes": 1444,
+        "edges": 2645,
+        "source_fingerprint": "sha256:d34396cab7993a9284aa475655f631d30f683e2c8c34f6e07f223e23dad635b7"
+      },
+      "notes": [
+        "本层度量结构图本身，不度量事实层。"
+      ]
+    },
+    {
+      "layer": "L5",
+      "title": "对抗层：准入门抗攻击与越权拦截",
+      "passed": true,
+      "metrics": [
+        {
+          "name": "attack_rejection_rate",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "8/8 条攻击被准入门按合同条款拒绝"
+        },
+        {
+          "name": "gate_refused_without_crashing",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "攻击只会触发合同拒绝，不会让准入门崩溃"
+        },
+        {
+          "name": "no_promotion_under_attack",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "攻击下的候选没有任何一条被自动晋升为团队事实"
+        },
+        {
+          "name": "injection_held_at_proposed",
+          "value": 1.0,
+          "threshold": 1.0,
+          "direction": "higher",
+          "hard": true,
+          "passed": true,
+          "detail": "1/1 条注入的真实引文停留在 proposed"
+        }
+      ],
+      "details": {
+        "cases": [
+          {
+            "case": "fabricated-quote",
+            "name": "伪造引文",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "exact quote in an existing source",
+            "error": "candidate requires an exact quote in an existing source"
+          },
+          {
+            "case": "wrong-source",
+            "name": "引文来自另一条来源",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "exact quote in an existing source",
+            "error": "candidate requires an exact quote in an existing source"
+          },
+          {
+            "case": "unknown-source",
+            "name": "指向不存在的来源",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "exact quote in an existing source",
+            "error": "candidate requires an exact quote in an existing source"
+          },
+          {
+            "case": "empty-subject",
+            "name": "空主题键",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "bounded subject key",
+            "error": "candidate requires a bounded subject key"
+          },
+          {
+            "case": "oversized-subject",
+            "name": "超长主题键",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "bounded subject key",
+            "error": "candidate requires a bounded subject key"
+          },
+          {
+            "case": "invalid-kind",
+            "name": "非法事实类型",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "is not a valid FactKind",
+            "error": "'rumour' is not a valid FactKind"
+          },
+          {
+            "case": "outside-window",
+            "name": "引文落在窗口之外",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "outside the selected source window",
+            "error": "candidate quote is outside the selected source window"
+          },
+          {
+            "case": "too-many-candidates",
+            "name": "候选数量超限",
+            "expectation": "reject",
+            "blocked": true,
+            "crashed": false,
+            "expected_reason": "too many extraction candidates",
+            "error": "too many extraction candidates"
+          },
+          {
+            "case": "injection-in-source",
+            "name": "源材料内嵌越权指令",
+            "expectation": "propose",
+            "proposals": 1,
+            "facts": 1,
+            "promoted_to_team_truth": [],
+            "held_at_proposed": true
+          }
+        ],
+        "attacks": 9
+      },
+      "notes": [
+        "本层直接调用产品自己的准入门，不经过任何模型。",
+        "源材料里嵌入的越权指令如果被引用为事实，必须停留在 proposed。"
+      ]
+    }
+  ],
+  "notes": []
+}

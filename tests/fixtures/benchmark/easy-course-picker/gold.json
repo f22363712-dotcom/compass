@@ -1,0 +1,555 @@
+{
+  "format": "project-compass-eval-gold",
+  "version": 1,
+  "meta": {
+    "conversation_source": "Agent讨论同步/conversation.md",
+    "entry_count": 215,
+    "member_count": 2,
+    "agent_names": [
+      "AGY",
+      "Antigravity",
+      "Codex",
+      "ValOS"
+    ],
+    "gold_note": "金标准由 project_context.md 与 tasks/todo.md 独立撰写（先于本次评测建立），再锚定到 conversation.md 中真正记录该决策的条目。任何锚点或必需词无法在源材料中定位时，构建必须失败而不是放宽标准。"
+  },
+  "facts": [
+    {
+      "id": "ecp-fact-001",
+      "kind": "goal",
+      "subject_key": "goal:replay-pilot",
+      "value": "首个历史回放试点确定为 case-002，对应问卷第一列完整编号 5-002，填写者为大二学生。",
+      "evidence_ids": [
+        "conv-6f3b8c510df6",
+        "conv-9244382b0a85"
+      ],
+      "required_terms": [
+        "回放试点"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#当前案例"
+    },
+    {
+      "id": "ecp-fact-002",
+      "kind": "decision",
+      "subject_key": "decision:replay-input-boundary",
+      "value": "回放输入必须区分决策前已知课程与决策后实际选择；决策后的实际课表只用于事后验收，不得放进回放输入。",
+      "evidence_ids": [
+        "conv-6f3b8c510df6"
+      ],
+      "required_terms": [
+        "case-002"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#回放任务"
+    },
+    {
+      "id": "ecp-fact-003",
+      "kind": "decision",
+      "subject_key": "decision:model-program-boundary",
+      "value": "程序负责学分计算、课程类别判断、先修条件、时间冲突与方案可行性验证；模型负责理解自然语言、追问信息与解释方案取舍。",
+      "evidence_ids": [
+        "conv-250f45f252f8"
+      ],
+      "required_terms": [
+        "学分计算"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#数据边界"
+    },
+    {
+      "id": "ecp-fact-004",
+      "kind": "decision",
+      "subject_key": "decision:real-submission",
+      "value": "真实学校选课仍由学生手动提交；经用户明确授权的自动提交仅在本地合成沙盘运行。",
+      "evidence_ids": [
+        "conv-e5d5445d33fe"
+      ],
+      "required_terms": [
+        "手动提交"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#数据边界"
+    },
+    {
+      "id": "ecp-fact-005",
+      "kind": "decision",
+      "subject_key": "decision:team-lead",
+      "value": "组长负责项目整体推进，职责覆盖数据接口之外的工作；成员分工需要重排，不再沿用早先按两条工作线持续派工的建议。",
+      "evidence_ids": [
+        "conv-dabf9c4371ce"
+      ],
+      "required_terms": [
+        "整体推进"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#项目基本方针与当前分工"
+    },
+    {
+      "id": "ecp-fact-006",
+      "kind": "decision",
+      "subject_key": "decision:simulated-semester",
+      "value": "成功演示采用明确标注的模拟学期，用于展示模型比较多个可行方案与调用工具的过程；模拟课程、学分与开课时间必须标为演示假设。",
+      "evidence_ids": [
+        "conv-f821fd4fbf21",
+        "conv-950b5e84b01b",
+        "conv-b3d68da84583"
+      ],
+      "required_terms": [
+        "模拟学期"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#已确认的模拟演示路线"
+    },
+    {
+      "id": "ecp-fact-007",
+      "kind": "decision",
+      "subject_key": "decision:comparison-axis",
+      "value": "演示的比较方向已选定为本学期多修学分与保留更多空闲时间。",
+      "evidence_ids": [
+        "conv-1024e9fa93fe",
+        "conv-b3d68da84583",
+        "conv-f3ae8cff2ce4",
+        "conv-944dcbe6197f"
+      ],
+      "required_terms": [
+        "多修学分"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#已确认的模拟演示路线"
+    },
+    {
+      "id": "ecp-fact-008",
+      "kind": "decision",
+      "subject_key": "decision:competition-data",
+      "value": "比赛期间先用测试数据，赛后再接真实数据；真实接口不再是比赛开发前提。",
+      "evidence_ids": [
+        "conv-950b5e84b01b",
+        "conv-1024e9fa93fe",
+        "conv-f3ae8cff2ce4",
+        "conv-01a6cc2fa5f0",
+        "conv-556f406039b3",
+        "conv-a5a62a59a9e8",
+        "conv-bca5ff461aaf"
+      ],
+      "required_terms": [
+        "模拟数据"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#项目基本方针与当前分工"
+    },
+    {
+      "id": "ecp-fact-009",
+      "kind": "decision",
+      "subject_key": "decision:no-fabricated-catalog",
+      "value": "历史选课系统已关闭，历史候选课程目录不可核实，不得把假设课程包装成历史事实；应把任务限定为识别资料缺失、说明边界并停止生成具体课表。",
+      "evidence_ids": [
+        "conv-77e4a812b18e",
+        "conv-feabefb562dd",
+        "conv-f821fd4fbf21",
+        "conv-b3d68da84583",
+        "conv-8b5d5ac29921"
+      ],
+      "required_terms": [
+        "不可核实"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#当前案例与回放任务"
+    },
+    {
+      "id": "ecp-fact-010",
+      "kind": "decision",
+      "subject_key": "decision:real-execution-boundary",
+      "value": "真实执行以官方可用接口和允许范围为条件。",
+      "evidence_ids": [
+        "conv-4ba1d3ceb8fc",
+        "conv-a5467ddc5f15",
+        "conv-8b1b26d10c32",
+        "conv-e803b056abde",
+        "conv-a3ff5f2060d1",
+        "conv-278cd8ded6b6",
+        "conv-2b698ae88641",
+        "conv-42c3c8d6c72d"
+      ],
+      "required_terms": [
+        "真实选课"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#项目基本方针与当前分工"
+    },
+    {
+      "id": "ecp-fact-011",
+      "kind": "goal",
+      "subject_key": "goal:main-line",
+      "value": "项目主线为输入个人资料与偏好后得到合适方案，进一步探索自动抢课；双方按 Agent 搭建、数据模拟测试、评测测试、埋点日志、正式上线的顺序推进。",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2",
+        "conv-7c3511c7552c",
+        "conv-0b93b95bb385"
+      ],
+      "required_terms": [
+        "数据线"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#项目基本方针与当前分工"
+    },
+    {
+      "id": "ecp-fact-012",
+      "kind": "task",
+      "subject_key": "task:work-package-f01",
+      "value": "F01 数据中心会面准备与结果、字段缺口表，由组长侧承接，拟定交付 10月19日21:00。",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45"
+      ],
+      "required_terms": [
+        "字段缺口"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：tasks/todo.md#F01"
+    },
+    {
+      "id": "ecp-fact-013",
+      "kind": "task",
+      "subject_key": "task:work-package-f02",
+      "value": "F02 原始研究生课表接入只读查询适配器，拟定交付 10月21日21:00。",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2"
+      ],
+      "required_terms": [
+        "F02"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：tasks/todo.md#F02"
+    },
+    {
+      "id": "ecp-fact-014",
+      "kind": "task",
+      "subject_key": "task:work-package-f03",
+      "value": "F03 新比赛工作台的独立验收与产品反馈，已于 10月30日交付。",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2",
+        "conv-353668030fdb",
+        "conv-bb36833e7ae4",
+        "conv-103d3186cd5d",
+        "conv-a1664a63a341",
+        "conv-4fe21823df32"
+      ],
+      "required_terms": [
+        "F03"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：tasks/todo.md#F03"
+    },
+    {
+      "id": "ecp-fact-015",
+      "kind": "task",
+      "subject_key": "task:work-package-f04",
+      "value": "F04 赛事要求核实与现有 Word/视频审阅，已于 10月30日交付。",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45"
+      ],
+      "required_terms": [
+        "赛事要求"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：tasks/todo.md#F04"
+    },
+    {
+      "id": "ecp-fact-016",
+      "kind": "assumption",
+      "subject_key": "assumption:manual-acceptance-baseline",
+      "value": "需要提供或指定一位熟悉该培养方案的人，核对类别剩余学分和可行组合，作为人工验收基准。",
+      "evidence_ids": [
+        "conv-6f3b8c510df6"
+      ],
+      "required_terms": [
+        "验收基准"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：tasks/todo.md#F01 验收条件"
+    },
+    {
+      "id": "ecp-fact-017",
+      "kind": "assumption",
+      "subject_key": "assumption:unverified-fields",
+      "value": "培养方案版本、已修课程状态、候选课代码与学分、开课时间及名额含义仍待核实，尚未用于程序判断个人缺口。",
+      "evidence_ids": [
+        "conv-6f3b8c510df6",
+        "conv-4be957ba77ef",
+        "conv-3ca2e2646a2a",
+        "conv-f754d74c3764",
+        "conv-6697b4ccba02",
+        "conv-80e01c90b25a"
+      ],
+      "required_terms": [
+        "未确认"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#项目基本方针与当前分工"
+    },
+    {
+      "id": "ecp-fact-018",
+      "kind": "assumption",
+      "subject_key": "assumption:credit-cap",
+      "value": "每学期 26 学分上限按培养方案确定；学生没有时段偏好，五个时段均可接受，时间冲突仍须检查。",
+      "evidence_ids": [
+        "conv-6f3b8c510df6",
+        "conv-98ea7bda0d17",
+        "conv-eb890984c701",
+        "conv-250f45f252f8"
+      ],
+      "required_terms": [
+        "26 学分"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：project_context.md#当前案例"
+    },
+    {
+      "id": "ecp-fact-019",
+      "kind": "task",
+      "subject_key": "task:case-001-rehearsal",
+      "value": "case-001 端到端演练：整理出 catalog/taken/plan JSON，生成 2-3 个候选方案，全部过 check_plan.py 校验，输出方案对比与规则结论与经验结论的解释。",
+      "evidence_ids": [
+        "conv-9244382b0a85",
+        "conv-6642c0fb5e5e"
+      ],
+      "required_terms": [
+        "case-001 端到端演练"
+      ],
+      "forbidden_terms": [],
+      "note": "来源：conversation.md 2026-10-07 21:26 分工提案"
+    }
+  ],
+  "questions": [
+    {
+      "id": "ecp-q-team-001",
+      "scope": "team",
+      "question": "这个项目当前确认的演示路线是什么？演示用的是哪个学期？",
+      "evidence_ids": [
+        "conv-f821fd4fbf21",
+        "conv-950b5e84b01b",
+        "conv-b3d68da84583"
+      ],
+      "required_terms": [
+        "模拟"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：能否说清已确认的路线"
+    },
+    {
+      "id": "ecp-q-team-002",
+      "scope": "team",
+      "question": "模型和程序各自负责什么？",
+      "evidence_ids": [
+        "conv-250f45f252f8"
+      ],
+      "required_terms": [
+        "学分计算"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：关键边界是否被记住"
+    },
+    {
+      "id": "ecp-q-team-003",
+      "scope": "team",
+      "question": "真实选课是怎么提交的？自动提交能做到哪一步？",
+      "evidence_ids": [
+        "conv-e5d5445d33fe"
+      ],
+      "required_terms": [
+        "手动提交"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：安全边界是否被记住"
+    },
+    {
+      "id": "ecp-q-team-004",
+      "scope": "team",
+      "question": "当前分工是怎样的？谁负责整体推进，谁负责哪条线？",
+      "evidence_ids": [
+        "conv-dabf9c4371ce",
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2",
+        "conv-7c3511c7552c",
+        "conv-0b93b95bb385"
+      ],
+      "required_terms": [
+        "推进"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：责任人是否可被定位"
+    },
+    {
+      "id": "ecp-q-team-005",
+      "scope": "team",
+      "question": "首个历史回放试点是哪个案例？对应哪份问卷？",
+      "evidence_ids": [
+        "conv-6f3b8c510df6",
+        "conv-9244382b0a85"
+      ],
+      "required_terms": [
+        "case-002"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：当前焦点是否清晰"
+    },
+    {
+      "id": "ecp-q-team-006",
+      "scope": "team",
+      "question": "比赛期间的数据策略是什么？真实接口还是模拟数据？",
+      "evidence_ids": [
+        "conv-950b5e84b01b",
+        "conv-1024e9fa93fe",
+        "conv-f3ae8cff2ce4",
+        "conv-01a6cc2fa5f0",
+        "conv-556f406039b3",
+        "conv-a5a62a59a9e8",
+        "conv-bca5ff461aaf"
+      ],
+      "required_terms": [
+        "模拟数据"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：当前方针是否一致"
+    },
+    {
+      "id": "ecp-q-team-007",
+      "scope": "team",
+      "question": "演示方案之间的比较方向是哪两个？",
+      "evidence_ids": [
+        "conv-1024e9fa93fe",
+        "conv-b3d68da84583",
+        "conv-f3ae8cff2ce4",
+        "conv-944dcbe6197f"
+      ],
+      "required_terms": [
+        "多修学分"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：取舍依据是否可复述"
+    },
+    {
+      "id": "ecp-q-team-008",
+      "scope": "team",
+      "question": "当前有哪些工作包？各自处于什么状态？",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2",
+        "conv-5cbaa8cdacec",
+        "conv-353668030fdb",
+        "conv-bb36833e7ae4",
+        "conv-103d3186cd5d",
+        "conv-a1664a63a341",
+        "conv-4fe21823df32"
+      ],
+      "required_terms": [
+        "F0"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "团队视角：任务全景是否可答"
+    },
+    {
+      "id": "ecp-q-personal-001",
+      "scope": "personal",
+      "question": "member-1 提出了哪些分工提案？具体要做什么？",
+      "evidence_ids": [
+        "conv-9244382b0a85",
+        "conv-6642c0fb5e5e"
+      ],
+      "required_terms": [
+        "case-001"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我这一侧认领了什么"
+    },
+    {
+      "id": "ecp-q-personal-002",
+      "scope": "personal",
+      "question": "member-2 承接了哪些工作包？目前状态如何？",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2"
+      ],
+      "required_terms": [
+        "F0"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我这一侧推到了哪里"
+    },
+    {
+      "id": "ecp-q-personal-003",
+      "scope": "personal",
+      "question": "member-2 需要负责人或学校提供什么才能继续推进？",
+      "evidence_ids": [
+        "conv-6f3b8c510df6"
+      ],
+      "required_terms": [
+        "验收基准"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我被卡在哪里"
+    },
+    {
+      "id": "ecp-q-personal-004",
+      "scope": "personal",
+      "question": "member-1 负责的是哪条线？两条线是怎么分的？",
+      "evidence_ids": [
+        "conv-4d88a7cc5c45",
+        "conv-19904b0c7ec2",
+        "conv-7c3511c7552c",
+        "conv-0b93b95bb385"
+      ],
+      "required_terms": [
+        "数据"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我的边界"
+    },
+    {
+      "id": "ecp-q-personal-005",
+      "scope": "personal",
+      "question": "回放试点里，决策前已知的信息和决策后实际选择分别是什么？",
+      "evidence_ids": [
+        "conv-6f3b8c510df6"
+      ],
+      "required_terms": [
+        "case-002"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我这条线的输入约束"
+    },
+    {
+      "id": "ecp-q-personal-006",
+      "scope": "personal",
+      "question": "member-2 做的演示方案比较的是哪两个方向？",
+      "evidence_ids": [
+        "conv-1024e9fa93fe",
+        "conv-b3d68da84583",
+        "conv-f3ae8cff2ce4",
+        "conv-944dcbe6197f"
+      ],
+      "required_terms": [
+        "多修学分"
+      ],
+      "forbidden_terms": [],
+      "accepted_answers": [],
+      "note": "个人视角：我这一侧的产出标准"
+    }
+  ]
+}

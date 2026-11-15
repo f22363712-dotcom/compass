@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/schema/server.json",
+  "name": "project-compass",
+  "title": "Compass",
+  "description": "Real-time interactive development notes & evidence-backed project control center for solo builders and teams coding with AI. Track actions, tentative decisions, and confirmed baselines via MCP.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "transport": {
+    "type": "stdio"
+  },
+  "runtime": "python",
+  "command": "uvx",
+  "args": ["project-compass-mcp", "--project-path", "."],
+  "capabilities": {
+    "tools": [
+      {
+        "name": "project_context",
+        "description": "Fetch verified project truth, confirmed architectural facts, and active conflicts."
+      },
+      {
+        "name": "append_evidence",
+        "description": "Safely append public execution logs and verifiable tool evidence."
+      },
+      {
+        "name": "query_state",
+        "description": "Query evidence-backed project state, conflicts, and expand spilled source quotes."
+      },
+      {
+        "name": "propose_fact",
+        "description": "Submit a proposed fact or architecture assumption to the developer board for review."
+      }
+    ]
+  },
+  "tags": ["coding-agents", "mcp", "cursor", "claude-desktop", "local-first", "provenance"]
+}

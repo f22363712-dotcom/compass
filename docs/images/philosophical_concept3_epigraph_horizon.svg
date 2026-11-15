@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 背景渐变：从上方的星空向下的深沉大地过渡 -->
+    <linearGradient id="horizonBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#090d15"/>
+      <stop offset="48%" stop-color="#111624"/>
+      <stop offset="50%" stop-color="#1e2538"/>
+      <stop offset="52%" stop-color="#0d111a"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </linearGradient>
+
+    <!-- 地平线发光 -->
+    <linearGradient id="lineGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(96, 165, 250, 0)"/>
+      <stop offset="20%" stop-color="rgba(96, 165, 250, 0.4)"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="80%" stop-color="rgba(96, 165, 250, 0.4)"/>
+      <stop offset="100%" stop-color="rgba(96, 165, 250, 0)"/>
+    </linearGradient>
+
+    <!-- 团队事实基石渐变 (深邃坚固基岩) -->
+    <linearGradient id="bedrockGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect width="800" height="800" fill="url(#horizonBg)"/>
+
+  <!-- 2. 上部天穹：个人工作台 (Personal Horizon · 散装探索与发散推测) -->
+  <!-- 左侧 Agent 探索概率光弧 -->
+  <path d="M 400 400 C 350 320, 240 300, 220 180" fill="none" stroke="rgba(147, 197, 253, 0.5)" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <circle cx="220" cy="180" r="4" fill="#93c5fd" opacity="0.8"/>
+  <text x="220" y="160" text-anchor="middle" font-family="'Geist Mono', monospace" font-size="9" fill="rgba(147, 197, 253, 0.5)">AGENT PROPOSALS</text>
+
+  <!-- 右侧 Agent 探索概率光弧 -->
+  <path d="M 400 400 C 450 320, 560 300, 580 180" fill="none" stroke="rgba(147, 197, 253, 0.5)" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <circle cx="580" cy="180" r="4" fill="#93c5fd" opacity="0.8"/>
+  <text x="580" y="160" text-anchor="middle" font-family="'Geist Mono', monospace" font-size="9" fill="rgba(147, 197, 253, 0.5)">HYPOTHESIS</text>
+
+  <!-- 3. 中央绝对分水岭：双重视界地平线 (The Horizon of Demarcation) -->
+  <line x1="100" y1="400" x2="700" y2="400" stroke="url(#lineGlow)" stroke-width="1.5" filter="url(#softGlow)"/>
+  
+  <!-- 地平线中央决策焦点 (The Triage Focus) -->
+  <circle cx="400" cy="400" r="7" fill="#ffffff" filter="url(#softGlow)"/>
+  <circle cx="400" cy="400" r="14" fill="none" stroke="#60a5fa" stroke-width="1.2" opacity="0.85"/>
+
+  <!-- 4. 下部基石：团队共识真理 (Team Truth · 沉入大地不可磨灭的碑铭) -->
+  <g transform="translate(310, 424)">
+    <!-- 矩形碑石基座 -->
+    <rect x="0" y="0" width="180" height="130" rx="3" 
+          fill="url(#bedrockGrad)" 
+          stroke="rgba(255, 255, 255, 0.15)" 
+          stroke-width="1"/>
+    
+    <!-- 碑石上不可篡改的铭刻经线 (不可篡改证据与事实账本) -->
+    <line x1="30" y1="30" x2="150" y2="30" stroke="#3b82f6" stroke-width="2"/>
+    <line x1="30" y1="55" x2="130" y2="55" stroke="rgba(255, 255, 255, 0.35)" stroke-width="1.5"/>
+    <line x1="30" y1="75" x2="140" y2="75" stroke="rgba(255, 255, 255, 0.25)" stroke-width="1.5"/>
+    <line x1="30" y1="95" x2="90" y2="95" stroke="rgba(255, 255, 255, 0.18)" stroke-width="1.5"/>
+
+    <!-- 锚定勾选标记微雕 (已采纳共识) -->
+    <path d="M 135 90 L 142 98 L 155 84" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- 5. 底部典雅铭文 -->
+  <text x="400" y="670" 
+        text-anchor="middle" 
+        font-family="'Cinzel', 'Georgia', serif" 
+        font-size="20" 
+        font-weight="400" 
+        letter-spacing="10" 
+        fill="#f8fafc" 
+        opacity="0.92">E P I G R A P H</text>
+        
+  <text x="400" y="700" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', 'Inter', monospace" 
+        font-size="10" 
+        letter-spacing="4" 
+        fill="rgba(224, 231, 255, 0.45)">THE DUAL HORIZON · IMMUTABLE BEDROCK OF TRUTH</text>
+</svg>

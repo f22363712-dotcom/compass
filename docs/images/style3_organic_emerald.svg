@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 温润森林深绿背景 -->
+    <radialGradient id="forestBg" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#0d231a"/>
+      <stop offset="60%" stop-color="#081711"/>
+      <stop offset="100%" stop-color="#030806"/>
+    </radialGradient>
+
+    <!-- 翡翠嫩叶渐变 (人机生态共生) -->
+    <linearGradient id="leafGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="45%" stop-color="#10b981"/>
+      <stop offset="85%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#a7f3d0"/>
+    </linearGradient>
+
+    <!-- 晨露浅金高光渐变 (真理水滴指针) -->
+    <linearGradient id="dewDropGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="50%" stop-color="#6ee7b7"/>
+      <stop offset="85%" stop-color="#fef08a"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <!-- 生机微光滤镜 -->
+    <filter id="emeraldGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="leafShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#010403" flood-opacity="0.9"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect width="800" height="800" fill="url(#forestBg)"/>
+
+  <!-- 2. 背景中的生命之树同心微波纹 (体现知识自然生长) -->
+  <g stroke="rgba(52, 211, 153, 0.08)" stroke-width="1.2">
+    <circle cx="400" cy="380" r="230" fill="none" stroke-dasharray="4 8"/>
+    <circle cx="400" cy="380" r="160" fill="none"/>
+    <circle cx="400" cy="380" r="90" fill="none" stroke-dasharray="2 4"/>
+  </g>
+
+  <!-- 3. 【生态共生与罗盘】两片环抱的翠绿生机代码叶片组成的有机罗盘环 (The Living Wreath) -->
+  <g filter="url(#leafShadow)">
+    
+    <!-- 左侧叶弧 (人类架构土壤) : 优雅的贝塞尔生长曲线 -->
+    <path d="M 400 580 C 260 580, 200 460, 200 380 C 200 280, 280 200, 380 185" 
+          fill="none" 
+          stroke="url(#leafGrad)" 
+          stroke-width="5" 
+          stroke-linecap="round"/>
+
+    <!-- 右侧叶弧 (Agent 智能蔓延) : 环抱相迎 -->
+    <path d="M 400 180 C 520 180, 600 280, 600 380 C 600 480, 520 580, 420 580" 
+          fill="none" 
+          stroke="url(#leafGrad)" 
+          stroke-width="3" 
+          stroke-linecap="round"
+          stroke-dasharray="8 4"/>
+
+    <!-- 罗盘正北真理生长点 -->
+    <circle cx="400" cy="180" r="4" fill="#fef08a"/>
+  </g>
+
+  <!-- 4. 【思维演进树】中心生长出的分叉嫩芽 (The Bud of Truth) -->
+  <g stroke-linecap="round">
+    <!-- 主干演进茎 -->
+    <path d="M 400 520 C 400 440, 400 380, 400 270" stroke="#34d399" stroke-width="4"/>
+    
+    <!-- 左分叉 (提议分支) -->
+    <path d="M 400 430 C 370 410, 330 420, 310 370" fill="none" stroke="#6ee7b7" stroke-width="2.5"/>
+    <circle cx="310" cy="370" r="5" fill="#a7f3d0"/>
+
+    <!-- 右分叉 (验证分支) -->
+    <path d="M 400 380 C 430 360, 470 370, 490 320" fill="none" stroke="#6ee7b7" stroke-width="2.5"/>
+    <circle cx="490" cy="320" r="5" fill="#a7f3d0"/>
+  </g>
+
+  <!-- 5. 【注意力聚焦与指南】顶端晨露罗盘指针 (The Dew-Drop Needle) -->
+  <g filter="url(#emeraldGlow)">
+    <!-- 晶莹剔透指向正北的晨露水滴指针 -->
+    <path d="M 400 210 C 385 245, 385 270, 400 280 C 415 270, 415 245, 400 210 Z" 
+          fill="url(#dewDropGrad)"/>
+    <!-- 晨露内部高光 -->
+    <circle cx="396" cy="255" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- 6. 底部自然生机排版 -->
+  <text x="400" y="660" 
+        text-anchor="middle" 
+        font-family="'Inter', sans-serif" 
+        font-size="24" 
+        font-weight="700" 
+        letter-spacing="5" 
+        fill="#f8fafc">COMPASS</text>
+        
+  <text x="400" y="692" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="11" 
+        letter-spacing="3" 
+        fill="#34d399">LIVING CODE COMPASS · ORGANIC TRUTH</text>
+</svg>

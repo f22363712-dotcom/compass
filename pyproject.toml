@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-compass"
+version = "1.0.0"
+description = "Real-time interactive development notes and evidence-backed project control center for solo builders and teams coding with AI."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name = "Fang & Compass Contributors"}]
+keywords = ["mcp", "coding-agents", "provenance", "evidence-board", "local-first"]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["mcp>=2.3.0"]
+
+[project.scripts]
+compass = "project_compass.cli:main"
+compass-mcp = "project_compass.mcp_server:main"
+compass-setup = "project_compass.mcp_setup:main"
+compass-codex-watch = "project_compass.codex_watch:main"
+compass-eval = "project_compass.eval.__main__:main"
+project-compass = "project_compass.cli:main"
+project-compass-mcp = "project_compass.mcp_server:main"
+project-compass-setup = "project_compass.mcp_setup:main"
+project-compass-codex-watch = "project_compass.codex_watch:main"
+project-compass-eval = "project_compass.eval.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+project_compass = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP"]
+
+

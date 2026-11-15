@@ -1,0 +1,19 @@
+# Smithery configuration for Project Compass
+# https://smithery.ai/docs/config
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      projectPath:
+        type: string
+        description: "Path to the local repository directory being governed"
+        default: "."
+  commandFunction:
+    python:
+      command: "uvx"
+      args:
+        - "project-compass-mcp"
+        - "--project-path"
+        - "${config.projectPath}"
