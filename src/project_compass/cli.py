@@ -122,12 +122,27 @@ def _review_callback(events, project_workspace: ProjectWorkspace, project_path: 
             next_history[-1]['action']=action
         else:
             raise ValueError("unsupported review action")
-        project_workspace.save_review_state(next_confirmed, next_history, next_accepted)
-        confirmed[:] = next_confirmed
-        history[:] = next_history
-        accepted[:] = next_accepted
+        project_workspace.save_review_state(
+            next_confirmed,
+            next_history,
+            next_accepted,
+            merge_existing=True,
+        )
+        merged_rel, merged_hist, merged_acc = project_workspace.load_review_state()
+        confirmed[:] = merged_rel
+        history[:] = merged_hist
+        accepted[:] = merged_acc
         return build_dashboard_state(events, project_path, confirmed, history, accepted)
 
+    def sync_from_disk(fresh_relations=None, fresh_history=None, fresh_accepted=None) -> None:
+        if fresh_relations is not None:
+            confirmed[:] = list(fresh_relations)
+        if fresh_history is not None:
+            history[:] = list(fresh_history)
+        if fresh_accepted is not None:
+            accepted[:] = list(fresh_accepted)
+
+    review.sync_from_disk = sync_from_disk
     return review, confirmed, history, accepted
 
 
@@ -161,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--with-code-index', action='store_true', help='Attach built-in Python AST code structure graph as read-only DerivedContext')
     parser.add_argument("--port", type=int, default=8787, help="Dashboard port for --web")
     parser.add_argument("--workspace-root", type=Path, default=Path(".project-memory"), help="Local root for persisted project states")
-    parser.add_argument("--export-format", choices=["issue", "pr", "prd", "json"], help="Export cognitive assets (GitHub Issue, PR description, or PRD) and print to stdout")
+    parser.add_argument("--export-format", choices=["issue", "pr", "prd", "mindmap", "json"], help="Export cognitive assets (GitHub Issue, PR description, PRD, or Mermaid mindmap) and print to stdout")
     parser.add_argument("--index-code", action="store_true", help="Build AST code symbol & call graph summary for --scan/--open or current directory and exit")
     parser.add_argument("--list-projects", action="store_true", help="List persisted project workspaces and exit")
     parser.add_argument(
@@ -312,14 +327,17 @@ def main(argv: list[str] | None = None) -> int:
                 from .derived_context import DerivedContext
                 return DerivedContext.load(args.derived_context, project_id=project_workspace.project_id, project_root=project_path)
             if args.with_code_index and project_workspace is not None:
-                from .code_index import build_code_index
                 from .derived_context import DerivedContext
-                code_payload = build_code_index(project_path, project_id=project_workspace.project_id)
+                from .onboarding import build_and_save_workspace_code_index
+                code_payload = build_and_save_workspace_code_index(project_workspace)
                 return DerivedContext.from_understand_anything(
                     code_payload,
                     project_id=project_workspace.project_id,
                     project_root=project_path,
                 )
+            if args.open and project_workspace is not None:
+                from .onboarding import load_workspace_derived_context
+                return load_workspace_derived_context(project_workspace)
             return None
         if args.web:
             if not (args.scan or args.open or args.sample):
@@ -335,6 +353,11 @@ def main(argv: list[str] | None = None) -> int:
                 from .reason_preview import ReasonPreview
                 reason_preview=ReasonPreview.load(args.reason_preview,project_path,events)
             derived_context = _resolve_derived_context()
+            rescan_helper = (
+                ProjectRescan(project_workspace, events, extract_docs=bool(args.extract_docs))
+                if not args.sample
+                else None
+            )
             run_dashboard(
                 events,
                 project_path=str(project_path),
@@ -346,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
                 refresh_callback=refresh_callback,
                 intake_status=intake_status,
                 sample_mode=args.sample,
-                rescan_callback=ProjectRescan(project_workspace, events).refresh if not args.sample else None,
+                rescan_callback=rescan_helper.refresh if rescan_helper else None,
                 extraction_jobs=ExtractionJobs(project_workspace, events, args.member_id,
                     usage_logger=_log_model_usage, max_batches=args.extraction_max_batches,
                     max_tokens=args.extraction_max_tokens, automatic=args.auto_extract, session_members=session_members) if args.enable_extraction else None,
@@ -355,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                 workspace_root=None if args.sample else args.workspace_root,
                 project_scan_job=None if args.sample else ProjectScanJob(args.workspace_root),
                 derived_context=derived_context,
+                auto_doc_sync=(rescan_helper.sync_if_docs_changed if (rescan_helper and args.extract_docs) else None),
             )
             return 0
         if args.export_format:

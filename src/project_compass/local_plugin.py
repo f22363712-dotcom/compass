@@ -6,6 +6,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .agent_inbox import AgentInbox
+from .completion_gate import evaluate_completion_gate
 from .dashboard import build_dashboard_state
 from .investigator import investigate
 from .plugin_protocol import (
@@ -27,7 +28,7 @@ class PluginRequestError(RuntimeError):
 class LocalPluginAdapter:
     """Small MCP-style local adapter over the existing project-bound Agent API."""
 
-    METHODS = {"project.context", "evidence.append", "state.query", "fact.propose"}
+    METHODS = {"project.context", "evidence.append", "state.query", "fact.propose", "note.record", "completion.verify"}
     STATE_SCOPES = {"team", "personal", "evidence", "requests", "history"}
 
     def __init__(self, base_url: str, context: ProjectContext, token: str, *, timeout: float = 5.0, workspace=None):
@@ -105,6 +106,21 @@ class LocalPluginAdapter:
             result = self._post("/api/agent/proposals", {"schema_version": 1, "proposals": proposal["proposals"]})
             self._cached_context = None
             return result
+        if method == "note.record":
+            project_id = params.get("project_id") or self.context.project_id
+            if project_id != self.context.project_id:
+                raise ValueError("note record project mismatch")
+            note_payload = {k: v for k, v in params.items() if k != "project_id"}
+            note_payload.setdefault("schema_version", 1)
+            result = self._post("/api/agent/notes", note_payload)
+            self._cached_context = None
+            return result
+        if method == "completion.verify":
+            project_id = params.get("project_id") or self.context.project_id
+            if project_id != self.context.project_id:
+                raise ValueError("completion verify project mismatch")
+            verify_payload = {k: v for k, v in params.items() if k != "project_id"}
+            return self._post("/api/agent/verify-completion", verify_payload)
         raise AssertionError("unreachable")
 
     def append_event(self, event) -> dict:
@@ -332,6 +348,28 @@ class WorkspaceMCPAdapter:
             result = inbox.propose(client, {"schema_version": 1, "proposals": proposals})
             self._cached_context = None
             return result
+        if method == "note.record":
+            project_id = params.get("project_id") or self.context.project_id
+            if project_id != self.context.project_id:
+                raise ValueError("note record project mismatch")
+            note_payload = {k: v for k, v in params.items() if k != "project_id"}
+            note_payload.setdefault("schema_version", 1)
+            inbox, client = self._ensure_inbox()
+            result = inbox.record_note(client, note_payload)
+            self._cached_context = None
+            return result
+        if method == "completion.verify":
+            project_id = params.get("project_id") or self.context.project_id
+            if project_id != self.context.project_id:
+                raise ValueError("completion verify project mismatch")
+            events, state, _, _ = self._load_full_state()
+            return evaluate_completion_gate(
+                state,
+                events,
+                summary=str(params.get("summary") or ""),
+                changed_files=params.get("changed_files"),
+                test_evidence_ids=params.get("test_evidence_ids"),
+            )
         raise AssertionError("unreachable")
 
     def append_event(self, event) -> dict:

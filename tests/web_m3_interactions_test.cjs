@@ -482,7 +482,7 @@ async function main() {
     await h.flush();
 
     vm.runInContext('state.lens = "personal"; state.member = "bob"; render();', h.context);
-    assert.ok(!h.element("goal-status").textContent.includes("confirmed"), "Conflicted member B goal falsely showed confirmed");
+    assert.ok(h.element("goal-status").textContent.includes("存在分歧") && !h.element("goal-status").classList.contains("is-accepted"), "Conflicted member B goal did not show conflicted Chinese status");
     assert.ok(h.goalSurface.classList.contains("is-conflicted"), "Goal surface missing is-conflicted class");
     assert.equal(h.baseState.personal.bob.facts[0].status, "conflicted");
 
@@ -492,7 +492,7 @@ async function main() {
     assert.ok(!todoHtml.includes("任务状态：已实现"), "Blocked task claimed 已实现");
 
     const decHtml = h.element("personal-decision-list").innerHTML;
-    assert.ok(decHtml.includes("✓ 已确认共识") && !decHtml.includes(">proposed<"), "Accepted team fact in personal list showed contradictory proposed badge");
+    assert.ok(decHtml.includes("✓ 已确认共识") && decHtml.includes("is-accepted") && !decHtml.includes(">待核对<"), "Accepted team fact in personal list showed contradictory unaccepted badge");
 
     // Read-only project must NEVER emit false ✓ 团队事实 for unaccepted task-b
     vm.runInContext("state.data.project.read_only = true; render();", h.context);
@@ -502,7 +502,7 @@ async function main() {
     // Rejected fact omits duplicate reject button
     vm.runInContext('state.data.project.read_only = false; state.data.review_history = [{ action: "reject_fact", fact_id: "task-b", reviewer: "lead" }]; render();', h.context);
     const rejTodoHtml = h.element("personal-todo-list").innerHTML;
-    assert.ok(rejTodoHtml.includes("rejected"), "Rejected status missing on personal task card");
+    assert.ok(rejTodoHtml.includes("is-rejected") && rejTodoHtml.includes("已驳回"), "Rejected status missing on personal task card");
     assert.ok(!rejTodoHtml.includes('data-inline-review="reject_fact"'), "Duplicate reject button remained on rejected card");
 
     // XSS & attribute escaping
@@ -635,7 +635,7 @@ async function main() {
     assert.ok(factListHtml.includes('<div class="fact-card" role="button" tabindex="0"') && !factListHtml.includes('<button'), "fact-card nested button inside button");
 
     vm.runInContext('state.data.personal.bob.facts[0].status = "rejected"; render();', h.context);
-    assert.equal(h.element("goal-status").textContent, "rejected · 已拒绝");
+    assert.equal(h.element("goal-status").textContent, "已驳回");
     assert.ok(h.goalSurface.classList.contains("is-rejected"), "Rejected North Star goal missing .is-rejected class");
     assert.ok(!h.goalSurface.classList.contains("is-proposed"), "Rejected North Star goal still carried .is-proposed");
   }
@@ -767,7 +767,7 @@ async function main() {
       render();
     `, h.context);
     assert.equal(h.element("goal-title").textContent, "Accepted Team Goal", "Personal North Star did not prefer team-accepted goal via resolveFactStatus");
-    assert.ok(h.element("goal-status").textContent.includes("confirmed"), "Personal North Star did not display confirmed badge");
+    assert.ok(String(h.element("goal-status").className || "").includes("is-accepted") && h.element("goal-status").textContent.includes("已"), "Personal North Star did not display confirmed badge");
 
     // Stale source & direction_suggestion hide inline accept while keeping non-stale reject; evidence_requests missing new_evidence_ids safe + XSS escaped
     vm.runInContext(`
@@ -981,7 +981,7 @@ async function main() {
     assert.equal(h.element("session-presence-bar").hidden, true, "Solo mode did not hide multi-member presence bar");
     assert.equal(h.element("member-picker").hidden, true, "Solo mode did not hide member picker");
     assert.equal(h.element("lens-personal-btn").textContent, "实时纪要 · 待定思路");
-    assert.equal(h.element("lens-team-btn").textContent, "项目基准 · 已定案");
+    assert.equal(h.element("lens-team-btn").textContent, "已定案基准");
 
     // Solo mode allows committing directly from personal drawer without switching to team lens
     vm.runInContext('openFact("d1");', h.context);
@@ -996,7 +996,7 @@ async function main() {
     assert.equal(vm.runInContext("effectiveWorkMode()", h.context), "team");
     assert.equal(store.get("compass_work_mode"), "team");
     assert.equal(h.element("session-presence-bar").hidden, false, "Team mode did not restore presence bar");
-    assert.equal(h.element("lens-team-btn").textContent, "团队共识 · 事实基准");
+    assert.equal(h.element("lens-team-btn").textContent, "团队共识");
 
     // Verify localStorage restores remembered signature on fresh boot when readOnly is false
     const hReload = buildTestHarness({ initialFetch: true, state: soloState, localStorage: localStorageMock });

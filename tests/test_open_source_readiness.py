@@ -52,7 +52,7 @@ class OpenSourceReadinessTests(unittest.TestCase):
         self.assertIn('project_compass = ["web/*"]', pyproject_text)
         self.assertIn('compass = "project_compass.cli:main"', pyproject_text)
         self.assertIn('compass-mcp = "project_compass.mcp_server:main"', pyproject_text)
-        self.assertEqual(__version__, "1.0.0")
+        self.assertEqual(__version__, "1.4.0")
 
         html_text = (REPO_ROOT / "src" / "project_compass" / "web" / "index.html").read_text(encoding="utf-8")
         self.assertIn('id="work-mode-switch"', html_text)
@@ -61,10 +61,10 @@ class OpenSourceReadinessTests(unittest.TestCase):
 
         server_meta = json.loads((REPO_ROOT / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server_meta["license"], "Apache-2.0")
-        self.assertEqual(server_meta["version"], "1.0.0")
+        self.assertEqual(server_meta["version"], "1.4.0")
         self.assertEqual(
             [tool["name"] for tool in server_meta["capabilities"]["tools"]],
-            ["project_context", "append_evidence", "query_state", "propose_fact"],
+            ["project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"],
         )
 
         # MCP initialize reports package __version__
@@ -75,7 +75,7 @@ class OpenSourceReadinessTests(unittest.TestCase):
             adapter = WorkspaceMCPAdapter(ProjectWorkspace(Path(tmp) / "ws", project_dir), ctx)
             server = ProjectCompassMCPServer(adapter)
             init_res = server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
-            self.assertEqual(init_res["result"]["serverInfo"]["version"], "1.0.0")
+            self.assertEqual(init_res["result"]["serverInfo"]["version"], "1.4.0")
 
     def test_o3_zero_config_workspace_mcp_flow_and_remote_token_guard(self):
         with tempfile.TemporaryDirectory() as tmp:

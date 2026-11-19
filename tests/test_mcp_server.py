@@ -22,7 +22,7 @@ class MCPServerTests(unittest.TestCase):
 
         self.assertEqual(initialized["result"]["protocolVersion"], "2024-11-05")
         self.assertEqual({tool["name"] for tool in listed["result"]["tools"]}, {
-            "project_context", "append_evidence", "query_state", "propose_fact"
+            "project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"
         })
 
     def test_tools_call_dispatches_to_local_adapter_and_returns_mcp_content(self):

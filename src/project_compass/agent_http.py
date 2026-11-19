@@ -63,6 +63,25 @@ def route_agent_request(handler, path, method):
             payload = handler._request_json()
             with handler.server.state_lock:
                 result = inbox.append_events(client, payload) if path.endswith('/events') else inbox.propose(client, payload)
+                if hasattr(handler.server, 'record_workspace_signature'):
+                    handler.server.record_workspace_signature()
+            handler._json(200, result)
+        elif method == 'POST' and path == '/api/agent/notes':
+            payload = handler._request_json()
+            with handler.server.state_lock:
+                if hasattr(handler, '_sync_server_workspace'):
+                    handler._sync_server_workspace()
+                result = inbox.record_note(client, payload)
+                if hasattr(handler.server, 'record_workspace_signature'):
+                    handler.server.record_workspace_signature()
+            handler._json(200, result)
+        elif method == 'POST' and path == '/api/agent/verify-completion':
+            payload = handler._request_json()
+            with handler.server.state_lock:
+                if hasattr(handler, '_sync_server_workspace'):
+                    handler._sync_server_workspace()
+                state = handler.server.dashboard_state()
+                result = inbox.verify_completion(client, payload, state=state)
             handler._json(200, result)
         else:
             handler._reject(404, {'error': 'unknown Agent protocol route'})

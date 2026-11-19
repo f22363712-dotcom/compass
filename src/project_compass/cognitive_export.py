@@ -189,7 +189,7 @@ def export_prd(state: dict[str, Any]) -> str:
         f"# 产品需求与技术规格说明书 (PRD / SPEC)",
         f"## 项目：{project.get('name', 'Project Compass')}",
         "",
-        f"- **文档版本**：v1.0",
+        f"- **文档版本**：v1.4",
         f"- **生成时间**：{exported_at}",
         f"- **可追溯证据总量**：{project.get('evidence_count', len(state.get('evidence', [])))} 条",
         "",
@@ -267,16 +267,91 @@ def export_prd(state: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def export_mindmap(state: dict[str, Any]) -> str:
+    """Generate a Mermaid cognitive mindmap + evidence index Markdown export."""
+    project = state.get("project", {})
+    team = state.get("team", {})
+    thinking = state.get("thinking_line") or team.get("thinking_line") or {}
+    root = thinking.get("root") or {}
+    branches = thinking.get("branches") or []
+    code_nodes = thinking.get("code_nodes") or []
+    exported_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    def _mm_safe(text: Any, max_len: int = 44) -> str:
+        cleaned = _clean_text(text).replace('"', "'").replace("`", "'").replace("\n", " ")
+        cleaned = cleaned.replace("(", "（").replace(")", "）").replace("[", "【").replace("]", "】")
+        if len(cleaned) > max_len:
+            cleaned = cleaned[: max_len - 1] + "…"
+        return cleaned or "未命名节点"
+
+    root_label = _mm_safe(root.get("label") or project.get("name") or "核心目标待定锚", 32)
+    mermaid_lines: list[str] = [
+        "```mermaid",
+        "mindmap",
+        f"  root(({root_label}))",
+    ]
+    index_lines: list[str] = []
+
+    if branches:
+        for branch in branches:
+            b_state = branch.get("state")
+            b_status = branch.get("status")
+            prefix = "已舍弃" if b_state == "abandoned" else "已暂缓" if b_state == "deferred" else "已定案" if b_status == "accepted" else "待拍板"
+            b_label = _mm_safe(branch.get("label"), 26)
+            mermaid_lines.append(f"    {prefix}：{b_label}")
+            ev_str = ", ".join(branch.get("evidence_ids") or [])
+            full_branch = _clean_text(branch.get("full_label") or branch.get("label"))
+            index_lines.append(f"- **[{prefix}]** {full_branch}" + (f" `{ev_str}`" if ev_str else ""))
+            for child in branch.get("children") or []:
+                mark = "已完成" if child.get("task_state") == "completed" else "待办"
+                c_label = _mm_safe(child.get("label"), 24)
+                mermaid_lines.append(f"      {mark}：{c_label}")
+                c_ev = ", ".join(child.get("evidence_ids") or [])
+                full_child = _clean_text(child.get("full_label") or child.get("label"))
+                index_lines.append(f"  - [{mark}] {full_child}" + (f" `{c_ev}`" if c_ev else ""))
+    else:
+        mermaid_lines.append("    待提炼分支（随手记或接入对话后自动生长）")
+
+    archive = thinking.get("historical_archive") or {}
+    archive_items = archive.get("items") or []
+    if archive_items:
+        mermaid_lines.append(f"    历史文档参考（{len(archive_items)} 条）")
+        for arch in archive_items[:5]:
+            mermaid_lines.append(f"      {_mm_safe(arch.get('label'), 24)}")
+
+    if code_nodes:
+        mermaid_lines.append("    关联代码结构")
+        for node in code_nodes:
+            mermaid_lines.append(f"      {_mm_safe(node.get('label') or node.get('id'), 36)}")
+
+    mermaid_lines.append("```")
+
+    lines = [
+        f"# {project.get('name', 'Compass')} · 认知思维导图 (Cognitive Mindmap)",
+        "",
+        f"> 导出时间：{exported_at} · 可直接在 GitHub / Markdown 编辑器 / Obsidian 渲染",
+        "",
+        *mermaid_lines,
+        "",
+        "## 节点与原始证据编号对照",
+        *(index_lines or ["_当前尚无分支记录。_"]),
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def export_state_by_format(state: dict[str, Any], fmt: str) -> tuple[str, str, str]:
     """Return (content, content_type, filename) for the requested export format."""
     normalized = (fmt or "json").strip().lower()
-    proj_name = state.get("project", {}).get("name", "project-compass")
+    proj_name = state.get("project", {}).get("name", "compass")
     if normalized == "issue":
         return export_github_issue(state), "text/markdown; charset=utf-8", f"{proj_name}-github-issue.md"
     if normalized == "pr":
         return export_pull_request(state), "text/markdown; charset=utf-8", f"{proj_name}-pull-request.md"
     if normalized == "prd":
         return export_prd(state), "text/markdown; charset=utf-8", f"{proj_name}-prd-spec.md"
+    if normalized == "mindmap":
+        return export_mindmap(state), "text/markdown; charset=utf-8", f"{proj_name}-mindmap.md"
     # Default to json
     import json
     payload = {

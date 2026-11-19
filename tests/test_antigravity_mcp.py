@@ -43,6 +43,10 @@ class FakeLocalAdapter:
             return {"appended": 1, "id": event.get("id")}
         if method == "fact.propose":
             return {"accepted": False, "proposed": len(arguments.get("proposals", []))}
+        if method == "note.record":
+            return {"recorded": True, "note": {"kind": arguments.get("kind", "decision")}}
+        if method == "completion.verify":
+            return {"passed": True, "verdict": "pass", "blockers": [], "warnings": []}
         raise ValueError(f"unknown method {method}")
 
 
@@ -75,7 +79,10 @@ class AntigravityMCPTest(unittest.TestCase):
         tools_res = self.server.handle(tools_req)
         self.assertEqual(tools_res["id"], 2)
         tool_names = [t["name"] for t in tools_res["result"]["tools"]]
-        self.assertEqual(tool_names, ["project_context", "append_evidence", "query_state", "propose_fact"])
+        self.assertEqual(
+            tool_names,
+            ["project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"],
+        )
 
     def test_mcp_call_project_context_and_query_state(self):
         call_ctx = {
@@ -143,6 +150,120 @@ class AntigravityMCPTest(unittest.TestCase):
         invalid_rpc = {"method": "tools/list"}
         res_invalid = self.server.handle(invalid_rpc)
         self.assertEqual(res_invalid["error"]["code"], -32600)
+
+    def test_global_mcp_server_routes_dynamic_project_path_and_multi_session(self):
+        from project_compass.local_plugin import WorkspaceMCPAdapter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            proj_a = Path(tmp) / "project-alpha"
+            proj_b = Path(tmp) / "project-beta"
+            proj_a.mkdir()
+            proj_b.mkdir()
+
+            ctx_a = ProjectContext.for_project(proj_a, "fang", "sess-default", "antigravity")
+            ws_a = ProjectWorkspace(proj_a / ".project-memory", proj_a)
+            server = ProjectCompassMCPServer(
+                WorkspaceMCPAdapter(ws_a, ctx_a),
+                allow_dynamic_project=True,
+            )
+
+            # Every exposed tool advertises optional project_path and session_id routing fields
+            tools_res = server.handle({"jsonrpc": "2.0", "id": 10, "method": "tools/list"})
+            for tool in tools_res["result"]["tools"]:
+                props = tool["inputSchema"]["properties"]
+                self.assertIn("project_path", props)
+                self.assertIn("session_id", props)
+
+            # Prime cache on proj_b session b1, then mutate via session b1 and b2
+            ctx_b1_before = server.handle({
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/call",
+                "params": {"name": "project_context", "arguments": {"project_path": str(proj_b), "session_id": "sess-b1"}},
+            })
+            self.assertFalse(ctx_b1_before["result"]["isError"])
+
+            note_b1 = server.handle({
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "tools/call",
+                "params": {
+                    "name": "record_note",
+                    "arguments": {
+                        "project_path": str(proj_b),
+                        "session_id": "sess-b1",
+                        "kind": "decision",
+                        "title": "漫剧主线分镜协议定案",
+                        "text": "统一采用横屏分镜节奏并保留角色色卡。",
+                    },
+                },
+            })
+            self.assertFalse(note_b1["result"]["isError"])
+
+            note_b2 = server.handle({
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {
+                    "name": "record_note",
+                    "arguments": {
+                        "project_path": str(proj_b),
+                        "session_id": "sess-b2",
+                        "kind": "task",
+                        "title": "补齐主角三视图色卡",
+                        "text": "待补齐主角正面侧面背面三视图提示词。",
+                    },
+                },
+            })
+            self.assertFalse(note_b2["result"]["isError"])
+
+            # proj_a stays completely isolated from proj_b's records
+            q_a = server.handle({
+                "jsonrpc": "2.0",
+                "id": 14,
+                "method": "tools/call",
+                "params": {"name": "query_state", "arguments": {"question": "漫剧主线分镜"}},
+            })
+            self.assertFalse(q_a["result"]["isError"])
+            self.assertNotIn("漫剧主线分镜协议定案", json.dumps(q_a["result"]["structuredContent"], ensure_ascii=False))
+
+            # Querying proj_b sees records written across concurrent sessions and refreshes cache
+            q_b = server.handle({
+                "jsonrpc": "2.0",
+                "id": 15,
+                "method": "tools/call",
+                "params": {"name": "query_state", "arguments": {"project_path": str(proj_b), "session_id": "sess-b2", "question": "分镜"}},
+            })
+            self.assertFalse(q_b["result"]["isError"])
+            self.assertIn("漫剧主线分镜协议定案", json.dumps(q_b["result"]["structuredContent"], ensure_ascii=False))
+
+            ctx_b1_after = server.handle({
+                "jsonrpc": "2.0",
+                "id": 16,
+                "method": "tools/call",
+                "params": {"name": "project_context", "arguments": {"project_path": str(proj_b), "session_id": "sess-b1"}},
+            })
+            self.assertFalse(ctx_b1_after["result"]["isError"])
+            self.assertEqual(ctx_b1_after["result"]["structuredContent"]["project_path"], str(proj_b.resolve()))
+
+            # Nonexistent project_path returns MCP error envelope instead of crashing
+            bad_proj = server.handle({
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "tools/call",
+                "params": {"name": "project_context", "arguments": {"project_path": str(Path(tmp) / "missing-dir")}},
+            })
+            self.assertTrue(bad_proj["result"]["isError"])
+
+            # Bound server (allow_dynamic_project=False) blocks foreign project_path
+            bound_server = ProjectCompassMCPServer(WorkspaceMCPAdapter(ws_a, ctx_a), allow_dynamic_project=False)
+            rejected = bound_server.handle({
+                "jsonrpc": "2.0",
+                "id": 18,
+                "method": "tools/call",
+                "params": {"name": "project_context", "arguments": {"project_path": str(proj_b)}},
+            })
+            self.assertTrue(rejected["result"]["isError"])
 
 
 if __name__ == "__main__":

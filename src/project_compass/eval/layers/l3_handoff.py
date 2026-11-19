@@ -113,22 +113,37 @@ class AgentAnswerer:
 
 
 def _ranked_evidence(question: str, facts, *, events=None) -> list[str]:
-    """Rank evidence ids by literal match over derived facts for external context."""
+    """Rank evidence ids by literal match over derived facts with hybrid raw-message fallback."""
     from ...literal_relevance import rank_literal
 
-    if not facts:
-        return []
-    ranked = rank_literal(
-        question,
-        facts,
-        list(facts),
-        text=lambda fact: f"{fact.quote or fact.value} {fact.subject_key}",
-    )
     evidence: list[str] = []
-    for fact in ranked:
-        for evidence_id in fact.evidence_ids:
-            if evidence_id not in evidence:
-                evidence.append(evidence_id)
+    if facts:
+        ranked = rank_literal(
+            question,
+            facts,
+            list(facts),
+            text=lambda fact: f"{fact.quote or fact.value} {fact.subject_key}",
+        )
+        for fact in ranked:
+            for evidence_id in fact.evidence_ids:
+                if evidence_id not in evidence:
+                    evidence.append(evidence_id)
+    if events and len(evidence) < 8:
+        msg_events = [
+            ev for ev in events
+            if getattr(ev, "kind", None) in {"assistant_message", "user_message"} and getattr(ev, "content", "")
+        ]
+        raw_ranked = rank_literal(
+            question,
+            msg_events,
+            [],
+            text=lambda ev: ev.content,
+        )
+        for ev in raw_ranked:
+            if ev.id not in evidence:
+                evidence.append(ev.id)
+            if len(evidence) >= 12:
+                break
     return evidence
 
 
@@ -189,7 +204,7 @@ def run_handoff(
         if hasattr(responder, "rank_for_question"):
             ranked = responder.rank_for_question(question.question)
         else:
-            ranked = _ranked_evidence(question.question, facts)
+            ranked = _ranked_evidence(question.question, facts, events=working)
         retrieval_scores.append(score_retrieval(ranked, question, cutoff=cutoff))
 
         # Was the answer-bearing evidence ever quoted as a fact at all? Without

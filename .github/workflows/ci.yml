@@ -35,10 +35,14 @@ jobs:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -q
 
-      - name: Check dashboard frontend syntax and Node VM contract
+      - name: Check dashboard frontend syntax and all Node VM contracts
         run: |
           node --check src/project_compass/web/app.js
-          node tests/web_tool_pair_test.cjs src/project_compass/web/app.js
+          set -e
+          for test_file in tests/*_test.cjs; do
+            echo "Running $test_file"
+            node "$test_file" src/project_compass/web/app.js
+          done
 
       - name: Run 5-layer evaluation benchmark Red-Line Gate
         env:

@@ -36,6 +36,10 @@
 | [UI_AB_TEST_AND_REVIEW_2026-11-14.md](UI_AB_TEST_AND_REVIEW_2026-11-14.md) | M3 Swiss Neo-Brutalism UI 双分支 A/B 实测与双盲 Critic 复核报告（Design Beta 落地，终版 9.3/10） |
 | [HEALTH_REMEDIATION_FINAL_REPORT_2026-11-14.md](HEALTH_REMEDIATION_FINAL_REPORT_2026-11-14.md) | M0–M4 长期健康度审计整改、双 A/B 盲审与终局门禁验收总结报告 |
 | [OPEN_SOURCE_AND_DOGFOODING_PLAN_2026-11-15.md](OPEN_SOURCE_AND_DOGFOODING_PLAN_2026-11-15.md) | 开源发布准备计划（O1–O4）、Project Compass 真实自举案例实跑与 UI 16 处占位符整改台账 |
+| [COMPASS_V1_1_DELIVERY_REPORT_2026-11-15.md](COMPASS_V1_1_DELIVERY_REPORT_2026-11-15.md) | Compass v1.1 交付与实测验收总结报告（含 `8787` 自举、MCP 热同步、`548` 单测、五层评测与真实浏览器走查） |
+| [COMPASS_V1_2_DELIVERY_REPORT_2026-11-16.md](COMPASS_V1_2_DELIVERY_REPORT_2026-11-16.md) | Compass v1.2 交付与实测验收报告（`553` 单测、18 个 `.cjs` 双时区、`eval` L1–L5、stdio 6 工具与三视口浏览器验证） |
+| [COMPASS_V1_3_DELIVERY_AND_BENCHMARK_2026-11-16.md](COMPASS_V1_3_DELIVERY_AND_BENCHMARK_2026-11-16.md) | Compass v1.3 交付与同题三方对比测评报告（v1.2 基线 vs v1.3 纯本地检索 vs MiniMax-M2.7 语义增强） |
+| [COMPASS_V1_4_MODEL_BENCHMARK_AND_UX_SEAL_2026-11-16.md](COMPASS_V1_4_MODEL_BENCHMARK_AND_UX_SEAL_2026-11-16.md) | Compass v1.4 四方模型横评、追问倒金字塔重塑、在线切模型与 v1.x 底座封板报告 |
 
 ---
 
@@ -43,7 +47,7 @@
 
 历史开发过程产物已按职责收敛归档，保留完整 Git 重命名历史以备溯源，不再混杂于 `docs/` 主目录：
 
-- `docs/archive/reviews/`：历史时点 PBR 代码审查、冒烟核对、设计说明与早期迭代计划（含 [COMPASS_ITERATION_PLAN.md](archive/reviews/COMPASS_ITERATION_PLAN.md)、[CODEGRAPH_BORROWING.md](archive/reviews/CODEGRAPH_BORROWING.md) 等 113 篇）
+- `docs/archive/reviews/`：历史时点 PBR 代码审查、冒烟核对、设计说明与 v1.1–v1.3 过渡迭代方案（含 [COMPASS_ITERATION_PLAN.md](archive/reviews/COMPASS_ITERATION_PLAN.md)、[CODEGRAPH_BORROWING.md](archive/reviews/CODEGRAPH_BORROWING.md)、v1.1/v1.2/v1.3 内部执行计划等）
 - `docs/archive/hackathon_and_brand/`：历史品牌命名、红蓝对抗、视频脚本与宣传文稿（33 篇）
 - `docs/archive/superpowers/`：2026-10 开发期的设计草案与分段实现计划（49 篇）
 - `docs/archive/root_legacy/`：曾位于仓库根目录的历史简报与清单（[HACKATHON_BRIEF.md](archive/root_legacy/HACKATHON_BRIEF.md)、[SUBMISSION_CHECKLIST.md](archive/root_legacy/SUBMISSION_CHECKLIST.md)、[PLAN.md](archive/root_legacy/PLAN.md)）

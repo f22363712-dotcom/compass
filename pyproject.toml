@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-compass"
-version = "1.0.0"
+version = "1.4.0"
 description = "Real-time interactive development notes and evidence-backed project control center for solo builders and teams coding with AI."
 readme = "README.md"
 license = {text = "Apache-2.0"}

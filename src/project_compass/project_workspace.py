@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evidence_filters import atomic_write_text, parse_iso_timestamp, path_lock
+from .evidence_filters import atomic_write_text, interprocess_file_lock, parse_iso_timestamp, path_lock
 from .evidence_store import EvidenceStore
 from .models import EvidenceEvent, EvidenceRelation
 
@@ -63,7 +63,7 @@ class ProjectWorkspace:
         saved_at = datetime.now(timezone.utc).isoformat()
         incoming = EvidenceStore(events).list()
         # Acquire registry_path before state_path everywhere to keep multi-lock ordering acyclic.
-        with path_lock(self.registry_path), path_lock(self.state_path):
+        with interprocess_file_lock(self.registry_path), interprocess_file_lock(self.state_path):
             previous = self._read_state() if self.exists() else None
             merged = EvidenceStore(self.load() if previous is not None else [])
             known = {event.id: event for event in merged.list()}
@@ -141,13 +141,83 @@ class ProjectWorkspace:
                 "saved_at": record.get("saved_at"),
             }
 
+    @staticmethod
+    def _merge_unique_dicts(existing: list[dict[str, Any]], incoming: list[dict[str, Any]], key_fn) -> list[dict[str, Any]]:
+        merged: list[dict[str, Any]] = []
+        seen: set[Any] = set()
+        for item in [*(existing or []), *(incoming or [])]:
+            copy_item = dict(item)
+            key = key_fn(copy_item)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(copy_item)
+        return merged
+
+    def state_stat_signature(self) -> tuple[int, int] | None:
+        try:
+            stat = self.state_path.stat()
+        except OSError:
+            return None
+        return (int(stat.st_mtime_ns), int(stat.st_size))
+
+    def merge_and_save_review_state(
+        self,
+        confirmed_relations: list[EvidenceRelation],
+        review_history: list[dict[str, Any]],
+        fact_reviews: list[dict[str, Any]] | None = None,
+    ) -> tuple[list[EvidenceRelation], list[dict[str, Any]], list[dict[str, Any]]]:
+        """Merge append-only review state with concurrent disk updates and persist atomically."""
+        with interprocess_file_lock(self.state_path):
+            record = self._read_state()
+            existing_rel = [EvidenceRelation.from_dict(value) for value in record.get("confirmed_relations", [])]
+            merged_rel: list[EvidenceRelation] = []
+            seen_rel_ids: set[str] = set()
+            for rel in [*existing_rel, *confirmed_relations]:
+                if rel.id in seen_rel_ids:
+                    continue
+                seen_rel_ids.add(rel.id)
+                merged_rel.append(rel)
+
+            merged_history = self._merge_unique_dicts(
+                list(record.get("review_history", [])),
+                [dict(item) for item in review_history],
+                lambda item: (
+                    str(item.get("action") or ""),
+                    str(item.get("fact_id") or ""),
+                    str(item.get("relation_id") or ""),
+                    str(item.get("reviewer") or ""),
+                    str(item.get("observed_at") or ""),
+                ),
+            )
+            merged_fact_reviews = self._merge_unique_dicts(
+                list(record.get("fact_reviews", [])),
+                [dict(item) for item in (fact_reviews or [])],
+                lambda item: (
+                    str(item.get("fact_id") or ""),
+                    str(item.get("action") or ""),
+                    str(item.get("reviewer") or ""),
+                    str(item.get("observed_at") or ""),
+                ),
+            )
+            record["confirmed_relations"] = [relation.to_dict() for relation in merged_rel]
+            record["review_history"] = merged_history
+            record["fact_reviews"] = merged_fact_reviews
+            self._write_state(record)
+            return merged_rel, merged_history, merged_fact_reviews
+
     def save_review_state(
         self,
         confirmed_relations: list[EvidenceRelation],
         review_history: list[dict[str, Any]],
         fact_reviews: list[dict[str, Any]] | None = None,
+        *,
+        merge_existing: bool = False,
     ) -> Path:
-        with path_lock(self.state_path):
+        if merge_existing:
+            self.merge_and_save_review_state(confirmed_relations, review_history, fact_reviews)
+            return self.state_path
+        with interprocess_file_lock(self.state_path):
             record = self._read_state()
             record["confirmed_relations"] = [relation.to_dict() for relation in confirmed_relations]
             record["review_history"] = [dict(item) for item in review_history]

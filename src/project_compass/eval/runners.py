@@ -31,6 +31,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 from ..limits import DEFAULT_HARNESS_TIMEOUT_S, MAX_CANDIDATES_PER_PAYLOAD, MAX_SOURCE_CHARS
 from ..models import EvidenceEvent
@@ -75,7 +76,7 @@ def _source_payload(events: list[EvidenceEvent]) -> list[dict]:
     """Prepare sources for a model, bounded so a request stays affordable."""
     sources = []
     for event in events:
-        if event.kind not in {"assistant_message", "user_message"}:
+        if event.kind not in {"assistant_message", "user_message", "file_snapshot"}:
             continue
         content = event.content.strip()
         if not content:
@@ -98,6 +99,10 @@ class CommandRunner:
     def __init__(self, spec: RunnerSpec) -> None:
         self.spec = spec
 
+    @property
+    def name(self) -> str:
+        return self.spec.name
+
     def _call(self, request: dict) -> dict:
         payload = json.dumps(request, ensure_ascii=False)
         environment = {**os.environ, **self.spec.env}
@@ -117,8 +122,9 @@ class CommandRunner:
         except subprocess.TimeoutExpired as exc:
             raise RunnerError(f"harness timed out after {self.spec.timeout}s") from exc
         if completed.returncode != 0:
+            detail = (completed.stderr or "").strip() or (completed.stdout or "").strip()
             raise RunnerError(
-                f"harness exited with {completed.returncode}: {completed.stderr.strip()[:400]}"
+                f"harness exited with {completed.returncode}: {detail[:400]}"
             )
         text = completed.stdout.strip()
         if not text:
@@ -393,6 +399,7 @@ def builtin_rule_extractor(events: list[EvidenceEvent]) -> ExtractorResult:
 #: Ready-made command templates. Each harness needs one thin wrapper that
 #: speaks the JSON contract above; the wrapper is what differs between tools.
 HARNESS_PRESETS: dict[str, tuple[str, ...]] = {
+    "api": (sys.executable, "-m", "project_compass.eval.harness", "api"),
     "claude": ("python", "-m", "project_compass.eval.harness", "claude"),
     "codex": ("python", "-m", "project_compass.eval.harness", "codex"),
     "custom": ("python", "-m", "project_compass.eval.harness", "custom"),

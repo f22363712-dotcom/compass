@@ -32,30 +32,30 @@ import subprocess
 import sys
 
 from ..limits import DEFAULT_HARNESS_TIMEOUT_S
+from ..llm_connector import chat_completion_text, extract_json_object
 
 EXTRACT_PROMPT = """\
-You are extracting candidate facts from a project conversation log.
+You are extracting high-signal candidate facts from a project conversation log.
 
 Return ONLY a JSON object with this exact shape:
 {"candidates": [{"source_id": "<id>", "kind": "goal|task|decision|assumption",
-"subject_key": "<short stable topic>", "quote": "<an exact span copied from the source>"}]}
+"subject_key": "<short stable topic>", "quote": "<an exact verbatim span copied from the source>"}]}
 
 Rules:
-- The quote MUST be copied character for character from the source it belongs to.
-- Every candidate MUST carry the source_id of that source.
-- Extract decisions, obligations, goals and open assumptions.
+- The quote MUST be copied character for character from the content of the matching source_id.
+- Every candidate MUST carry the exact source_id of that source.
+- Prefer concrete, settled goals, architectural/workflow decisions, specific assigned tasks, and open assumptions. Skip trivial greetings or generic chatter.
 - Do not invent facts that are not written in the source.
-- Return at most 24 candidates.
+- Return 1 to 10 high-signal candidates per batch (at most 24).
+- Keep internal reasoning concise and output ONLY the JSON object.
 
 SOURCES:
 """
 
 ANSWER_PROMPT = """\
-You are answering a question about a project using only the supplied context.
+You are answering a question about a project using only the supplied JSON context.
 
-Answer in the same language as the question. State the answer directly and
-name the evidence identifiers you relied on. If the context does not contain
-the answer, say what is missing instead of guessing.
+Answer concisely in the same language as the question. Directly include concrete terms, entity names, numbers, and rules from the context, and cite the relevant [evidence_id] tokens that appear in the context. Never invent an evidence ID not present in the context. If the context lacks the answer, state what is missing instead of guessing.
 
 CONTEXT:
 """
@@ -74,7 +74,17 @@ def _read_request() -> dict:
     return request
 
 
-def _call_cli(backend: str, prompt: str, timeout: int) -> str:
+def _call_cli(backend: str, prompt: str, timeout: int, *, max_tokens: int = 900) -> str:
+    if backend in {"api", "minimax", "ollama"}:
+        reply, err = chat_completion_text(
+            [{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            timeout=float(timeout),
+            temperature=0.0,
+        )
+        if err:
+            raise SystemExit(f"api harness failed: {err}")
+        return reply
     if backend == "claude":
         command = ["claude", "-p", prompt]
     elif backend == "codex":
@@ -100,33 +110,8 @@ def _call_cli(backend: str, prompt: str, timeout: int) -> str:
 
 
 def _extract_json(text: str) -> dict | None:
-    """Find one JSON object in a model answer, tolerating code fences."""
-    candidate = text.strip()
-    if candidate.startswith("```"):
-        candidate = candidate.split("```")[1] if "```" in candidate[3:] else candidate[3:]
-        if candidate.startswith("json"):
-            candidate = candidate[4:]
-    try:
-        value = json.loads(candidate)
-        return value if isinstance(value, dict) else None
-    except json.JSONDecodeError:
-        pass
-    start = candidate.find("{")
-    while start != -1:
-        depth = 0
-        for index in range(start, len(candidate)):
-            if candidate[index] == "{":
-                depth += 1
-            elif candidate[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        value = json.loads(candidate[start : index + 1])
-                    except json.JSONDecodeError:
-                        break
-                    return value if isinstance(value, dict) else None
-        start = candidate.find("{", start + 1)
-    return None
+    """Find one JSON object in a model answer, tolerating thinking blocks and code fences."""
+    return extract_json_object(text)
 
 
 def _render_sources(sources: list[dict]) -> str:
@@ -148,8 +133,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if task == "extract":
             sources = request.get("sources") or []
+            if not sources:
+                print(json.dumps({"candidates": []}))
+                return 0
             prompt = EXTRACT_PROMPT + _render_sources(sources)
-            raw = _call_cli(backend, prompt, timeout)
+            raw = _call_cli(backend, prompt, timeout, max_tokens=8192)
             parsed = _extract_json(raw)
             if parsed is None or not isinstance(parsed.get("candidates"), list):
                 print(json.dumps({"error": "the model did not return a candidates list"}))
@@ -164,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                 + json.dumps(context, ensure_ascii=False, indent=2)
                 + f"\n\nQUESTION:\n{question}\n"
             )
-            raw = _call_cli(backend, prompt, timeout)
+            raw = _call_cli(backend, prompt, timeout, max_tokens=3000)
             print(json.dumps({"answer": raw.strip()}, ensure_ascii=False))
             return 0
     except SystemExit:

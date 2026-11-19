@@ -28,3 +28,7 @@ tests/fixtures/benchmark/local-specs/
 .release-export/
 build/
 dist/
+docs/archive/
+docs/ZETARIS_DEMO_CHALLENGE_55S.md
+docs/GITHUB_PORTFOLIO_CURATION_2026-11-15.md
+

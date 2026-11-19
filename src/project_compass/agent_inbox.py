@@ -9,10 +9,12 @@ from pathlib import Path
 import re
 
 from .candidate_extraction import validate_candidates
+from .completion_gate import evaluate_completion_gate
 from .evidence_filters import SENSITIVE, parse_iso_timestamp
 from .fact_engine import derive_facts
 from .models import EvidenceEvent
 from .native_tool_trace import PRIVATE_INPUT, PRIVATE_TEXT, has_sensitive_switch
+from .quick_notes import ALLOWED_NOTE_KINDS, append_quick_note
 
 EVENT_TYPES = {'user_message', 'assistant_message', 'tool_call', 'tool_result', 'test_result', 'file_change'}
 
@@ -200,3 +202,61 @@ class AgentInbox:
                 metadata={**proposal.metadata, 'member_id': client.member_id, 'client_id': client.client_id,
                           'derivation': 'agent-submission-extractive-v1', 'actor_type': 'agent'}))
         return self._commit(incoming)
+
+    def record_note(self, client, payload):
+        if not isinstance(payload, dict):
+            raise ValueError('record_note payload must be an object')
+        note_obj = payload.get('note') if isinstance(payload.get('note'), dict) else payload
+        if 'schema_version' in payload and type(payload['schema_version']) is not int:
+            raise ValueError('unsupported Agent protocol version')
+        if 'schema_version' in payload and payload['schema_version'] != 1:
+            raise ValueError('unsupported Agent protocol version')
+        if any(token in json.dumps(payload, ensure_ascii=False) for token, _ in self._tokens):
+            raise ValueError('Agent credential must not appear in submitted note')
+        public_input(note_obj)
+        text = bounded(note_obj.get('text'), 2000)
+        kind = str(note_obj.get('kind') or 'decision').strip().lower()
+        if kind not in ALLOWED_NOTE_KINDS:
+            raise ValueError('unsupported note kind')
+        raw_title = note_obj.get('title')
+        title = '' if raw_title is None else str(raw_title).strip()[:120]
+        raw_nonce = note_obj.get('client_nonce')
+        client_nonce = '' if raw_nonce is None else str(raw_nonce).strip()[:80]
+        note_meta = append_quick_note(
+            self.workspace,
+            self.events,
+            text=text,
+            kind=kind,
+            member_id=client.member_id,
+            title=title,
+            client_nonce=client_nonce,
+            session_id=client.session_id,
+            source_channel='mcp_record_note',
+        )
+        nudge_lines = [
+            f"已记入「待拍板」分支：{note_meta['short_title']}（尚未定案，用户点击定案前不可当作正式需求）。",
+            f"已附短标题并落账至工作区 [{note_meta['source_id']}]，看板可实时生长呈现。",
+        ]
+        return {'recorded': True, 'note': note_meta, 'nudge_lines': nudge_lines}
+
+    def verify_completion(self, client, payload, *, state: dict):
+        if not isinstance(payload, dict):
+            raise ValueError('verify_completion payload must be an object')
+        if any(token in json.dumps(payload, ensure_ascii=False) for token, _ in self._tokens):
+            raise ValueError('Agent credential must not appear in completion gate')
+        public_input(payload)
+        raw_summary = payload.get('summary')
+        summary = '' if raw_summary is None else str(raw_summary).strip()[:2000]
+        changed_files = payload.get('changed_files')
+        if changed_files is not None and not isinstance(changed_files, list):
+            raise ValueError('changed_files must be a list of file paths')
+        test_evidence_ids = payload.get('test_evidence_ids')
+        if test_evidence_ids is not None and not isinstance(test_evidence_ids, list):
+            raise ValueError('test_evidence_ids must be a list of evidence IDs')
+        return evaluate_completion_gate(
+            state,
+            self.events,
+            summary=summary,
+            changed_files=changed_files,
+            test_evidence_ids=test_evidence_ids,
+        )

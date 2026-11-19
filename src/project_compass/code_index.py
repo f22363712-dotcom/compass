@@ -306,7 +306,13 @@ def _collect_calls(module: _Module, resolver: _Resolver) -> list[tuple[str, str]
     return edges
 
 
-def build_code_index(root: str | Path, *, project_id: str | None = None) -> dict:
+def build_code_index(
+    root: str | Path,
+    *,
+    project_id: str | None = None,
+    strict_syntax: bool = True,
+    max_files: int | None = None,
+) -> dict:
     """Build a code-structure graph for a Python source tree.
 
     The result is an ``understand-anything`` payload, so it can be handed to
@@ -314,6 +320,12 @@ def build_code_index(root: str | Path, *, project_id: str | None = None) -> dict
     """
     base = Path(root).expanduser().resolve()
     files = iter_python_files(base)
+    warnings: list[str] = []
+    truncated = False
+    if max_files is not None and max_files > 0 and len(files) > max_files:
+        warnings.append(f"python files truncated from {len(files)} to {max_files}")
+        files = files[:max_files]
+        truncated = True
     modules: dict[str, _Module] = {}
     skipped: list[dict] = []
     for path in files:
@@ -328,10 +340,16 @@ def build_code_index(root: str | Path, *, project_id: str | None = None) -> dict
             skipped.append({"path": rel, "reason": "not-utf8"})
             continue
         except OSError as exc:
+            if not strict_syntax:
+                skipped.append({"path": rel, "reason": "unreadable"})
+                continue
             raise CodeIndexError(f"source file could not be read: {rel}") from exc
         try:
             tree = ast.parse(source, filename=rel)
         except SyntaxError as exc:
+            if not strict_syntax:
+                skipped.append({"path": rel, "reason": "syntax-error"})
+                continue
             raise CodeIndexError(f"source file could not be parsed: {rel}") from exc
         modules[rel] = _Module(path=path, rel=rel, tree=tree, source=source)
 
@@ -380,8 +398,10 @@ def build_code_index(root: str | Path, *, project_id: str | None = None) -> dict
         for source_id, target_id in _collect_calls(module, resolver):
             add_edge(source_id, target_id, "calls")
 
-    warnings: list[str] = []
-    truncated = False
+    for rel_item in skipped:
+        if rel_item.get("reason") in {"syntax-error", "unreadable"}:
+            warnings.append(f"skipped {rel_item['path']} ({rel_item['reason']})")
+
     if len(nodes) > MAX_NODES:
         warnings.append(f"nodes truncated from {len(nodes)} to {MAX_NODES}")
         nodes = nodes[:MAX_NODES]

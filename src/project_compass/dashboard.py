@@ -4,13 +4,52 @@ from pathlib import Path
 from hashlib import sha1
 import re
 
-from .evidence_filters import as_utc_timestamp, is_public_raw_event, parse_iso_timestamp, resolve_member_id
+from .activity_stream import build_session_activity_stream
+from .agent_hints import build_local_agent_hints
+from .evidence_filters import (
+    SENSITIVE,
+    as_utc_timestamp,
+    is_platform_control,
+    is_public_raw_event,
+    parse_iso_timestamp,
+    resolve_member_id,
+)
 from .evidence_linking import build_evidence_index, build_requested_evidence_relations
 from .derived_context import DerivedContext
 from .fact_engine import derive_facts
 from .limits import MAX_DASHBOARD_VISIBLE_EDGES, MAX_DASHBOARD_VISIBLE_NODES
+from .llm_connector import public_llm_status
 from .models import EvidenceEvent, EvidenceRelation
 from .projections import build_views
+from .text_summary import (
+    clean_display_text,
+    is_historical_doc_fact,
+    select_next_consensus,
+    select_primary_goal,
+    summarize_node_title,
+)
+
+
+def _enrich_fact_titles(facts_list: list[dict], events_by_id: dict[str, EvidenceEvent]) -> None:
+    """Attach non-mutating display summaries (`short_title`, `clean_value`, `is_historical_doc`) to projected facts."""
+    for fact in facts_list:
+        explicit_title = None
+        source_kind = fact.get("source_kind")
+        for eid in fact.get("evidence_ids") or []:
+            src_ev = events_by_id.get(eid)
+            if src_ev is not None:
+                if not source_kind:
+                    source_kind = src_ev.kind
+                if isinstance(src_ev.metadata, dict) and src_ev.metadata.get("short_title"):
+                    explicit_title = str(src_ev.metadata.get("short_title"))
+                    break
+        if source_kind and not fact.get("source_kind"):
+            fact["source_kind"] = source_kind
+        max_len = 28 if fact.get("kind") == "goal" else 22
+        raw_val = fact.get("value") or fact.get("quote") or ""
+        fact["clean_value"] = clean_display_text(raw_val)
+        fact["short_title"] = summarize_node_title(raw_val, explicit_title, max_chars=max_len)
+        fact["is_historical_doc"] = is_historical_doc_fact(fact)
 
 
 def _build_timeline_chapters(facts: list[dict], directions: dict) -> list[dict]:
@@ -55,9 +94,10 @@ def _build_timeline_chapters(facts: list[dict], directions: dict) -> list[dict]:
                 "fact_ids": [],
                 "evidence_ids": [],
             }
-        lead = items[-1].get("value") or items[-1].get("quote") or fallback_sub
-        if len(lead) > 44:
-            lead = lead[:42] + "…"
+        lead = items[-1].get("short_title") or summarize_node_title(
+            items[-1].get("value") or items[-1].get("quote") or fallback_sub,
+            max_chars=26,
+        )
         has_accepted = any(i.get("status") == "accepted" or i.get("task_state") == "completed" for i in items)
         status = "completed" if has_accepted else "active"
         return {
@@ -80,17 +120,40 @@ def _build_timeline_chapters(facts: list[dict], directions: dict) -> list[dict]:
     ]
 
 
-def _build_thinking_line(facts: list[dict], directions: dict, structure: dict) -> dict:
-    goals = [f for f in facts if f.get("kind") == "goal"]
-    active_goal = next((f for f in goals if f.get("status") == "accepted"), goals[-1] if goals else None)
-    root = {
-        "fact_id": active_goal.get("id") if active_goal else None,
-        "label": active_goal.get("value") if active_goal else "尚未提取核心目标（运行文档提取或接入会话后生成）",
-        "status": active_goal.get("status", "proposed") if active_goal else "empty",
-        "evidence_ids": list(active_goal.get("evidence_ids") or [])[:4] if active_goal else [],
-    }
+def _build_thinking_line(
+    facts: list[dict],
+    directions: dict,
+    structure: dict,
+    *,
+    fallback_goal: dict | None = None,
+) -> dict:
+    active_goal = select_primary_goal(facts) or fallback_goal
+
+    if active_goal:
+        root_full = str(active_goal.get("value") or "").strip()
+        root_short = active_goal.get("short_title") or summarize_node_title(root_full, max_chars=28)
+        root = {
+            "fact_id": active_goal.get("id"),
+            "label": root_short,
+            "full_label": root_full,
+            "status": active_goal.get("status", "proposed"),
+            "evidence_ids": list(active_goal.get("evidence_ids") or [])[:4],
+            "inherited": (not any(f.get("kind") == "goal" for f in facts)) and fallback_goal is not None,
+        }
+    else:
+        root = {
+            "fact_id": None,
+            "label": "核心目标待定锚",
+            "full_label": "写一条随手记或让 AI 记录核心目标，右侧分支会自动生长",
+            "status": "empty",
+            "evidence_ids": [],
+            "inherited": False,
+        }
+
     branches: list[dict] = []
+    historical_items: list[dict] = []
     seen_quotes: set[str] = set()
+    accepted_fact_ids = {f.get("id") for f in facts if f.get("status") == "accepted"}
 
     # 1. Pruned / parked direction branches (abandoned / deferred)
     for d in list(directions.get("current") or []) + list(directions.get("candidates") or []):
@@ -101,25 +164,81 @@ def _build_thinking_line(facts: list[dict], directions: dict, structure: dict) -
         if not quote or quote in seen_quotes:
             continue
         seen_quotes.add(quote)
+        dir_fact_stub = {
+            "id": d.get("fact_id"),
+            "kind": "direction",
+            "status": d.get("status", "proposed") if d.get("fact_id") not in accepted_fact_ids else "accepted",
+            "author": d.get("author"),
+            "source_ref": d.get("source_ref"),
+            "evidence_ids": list(d.get("evidence_ids") or [])[:3],
+        }
+        short_dir = summarize_node_title(quote, max_chars=22)
+        if is_historical_doc_fact(dir_fact_stub):
+            historical_items.append({
+                "fact_id": d.get("fact_id"),
+                "kind": "direction",
+                "state": d_state,
+                "status": dir_fact_stub["status"],
+                "label": short_dir,
+                "full_label": quote,
+                "source_ref": d.get("source_ref") or "",
+                "evidence_ids": list(d.get("evidence_ids") or [])[:2],
+            })
+            continue
         branches.append({
             "branch_id": f"dir-{d.get('fact_id') or len(branches)}",
             "fact_id": d.get("fact_id"),
             "kind": "direction",
             "state": d_state,  # abandoned | deferred
             "status": d.get("status", "proposed"),
-            "label": quote[:68] + ("…" if len(quote) > 68 else ""),
+            "label": short_dir,
+            "full_label": quote,
             "evidence_ids": list(d.get("evidence_ids") or [])[:3],
             "children": [],
         })
 
-    # 2. Active Decision / Assumption branches
+    # 2. Separate live/accepted decisions from unconfirmed static document scan facts
     decisions = [f for f in facts if f.get("kind") in {"decision", "assumption"}]
-    tasks = [f for f in facts if f.get("kind") == "task"]
-    for idx, dec in enumerate(decisions[:4]):
+    active_decisions: list[dict] = []
+    for dec in decisions:
+        if dec.get("is_historical_doc") or is_historical_doc_fact(dec):
+            val = str(dec.get("value") or "").strip()
+            if val and val not in seen_quotes:
+                seen_quotes.add(val)
+                historical_items.append({
+                    "fact_id": dec.get("id"),
+                    "kind": dec.get("kind", "decision"),
+                    "status": dec.get("status", "proposed"),
+                    "label": dec.get("short_title") or summarize_node_title(val, max_chars=22),
+                    "full_label": val,
+                    "source_ref": dec.get("source_ref") or "",
+                    "evidence_ids": list(dec.get("evidence_ids") or [])[:2],
+                })
+        else:
+            active_decisions.append(dec)
+
+    def _safe_obs_ts(raw_obs: object) -> float:
+        if not raw_obs:
+            return 0.0
+        try:
+            return as_utc_timestamp(raw_obs).timestamp()
+        except (TypeError, ValueError):
+            return 0.0
+
+    active_decisions.sort(
+        key=lambda dec: (
+            0 if dec.get("status") == "accepted" else (1 if dec.get("status") == "conflicted" else 2),
+            -_safe_obs_ts(dec.get("observed_at")),
+            str(dec.get("id") or ""),
+        )
+    )
+
+    for idx, dec in enumerate(active_decisions[:8]):
         val = str(dec.get("value") or "").strip()
         if not val or val in seen_quotes:
             continue
         seen_quotes.add(val)
+        short_label = dec.get("short_title") or summarize_node_title(val, max_chars=22)
         branches.append({
             "branch_id": f"dec-{dec.get('id') or idx}",
             "fact_id": dec.get("id"),
@@ -127,42 +246,94 @@ def _build_thinking_line(facts: list[dict], directions: dict, structure: dict) -
             "state": "chosen",
             "status": dec.get("status", "proposed"),
             "source_status": (dec.get("source_state") or {}).get("status", "recorded"),
-            "label": val[:68] + ("…" if len(val) > 68 else ""),
+            "label": short_label,
+            "full_label": val,
             "evidence_ids": list(dec.get("evidence_ids") or [])[:3],
+            "_subject_prefix": str(dec.get("subject_key") or "").split(".", 1)[0],
             "children": [],
         })
 
-    # Attach tasks to the primary chosen decision branch (or a default execution branch)
-    task_nodes = [
-        {
-            "fact_id": t.get("id"),
-            "label": str(t.get("value") or "")[:56] + ("…" if len(str(t.get("value") or "")) > 56 else ""),
-            "task_state": t.get("task_state") or "pending",
-            "status": t.get("status", "proposed"),
-            "evidence_ids": list(t.get("evidence_ids") or [])[:2],
-        }
-        for t in tasks[:5]
-    ]
-    chosen_branches = [b for b in branches if b["state"] == "chosen"]
-    if task_nodes:
-        if chosen_branches:
-            chosen_branches[0]["children"] = task_nodes[:3]
-            if len(chosen_branches) > 1 and len(task_nodes) > 3:
-                chosen_branches[1]["children"] = task_nodes[3:5]
+    # Order active chosen branches ahead of abandoned/deferred ones so live consensus stands out first.
+    branches.sort(
+        key=lambda b: (
+            0 if (b["state"] == "chosen" and b["status"] == "accepted") else (1 if b["state"] == "chosen" else 2),
+        )
+    )
+
+    # 3. Tasks: keep active/accepted tasks as leaves, fold unconfirmed static-doc tasks into historical archive
+    raw_tasks = [f for f in facts if f.get("kind") == "task"]
+    tasks: list[dict] = []
+    for t in raw_tasks:
+        if t.get("is_historical_doc") or is_historical_doc_fact(t):
+            val = str(t.get("value") or "").strip()
+            if val:
+                historical_items.append({
+                    "fact_id": t.get("id"),
+                    "kind": "task",
+                    "status": t.get("status", "proposed"),
+                    "label": t.get("short_title") or summarize_node_title(val, max_chars=20),
+                    "full_label": val,
+                    "source_ref": t.get("source_ref") or "",
+                    "evidence_ids": list(t.get("evidence_ids") or [])[:2],
+                })
         else:
-            branches.append({
-                "branch_id": "exec-main",
-                "fact_id": task_nodes[0]["fact_id"],
-                "kind": "execution",
-                "state": "chosen",
-                "status": "proposed",
-                "label": "待办执行分支（尚未关联架构决策）",
-                "evidence_ids": task_nodes[0]["evidence_ids"],
-                "children": task_nodes,
-            })
+            tasks.append(t)
+
+    def _make_task_leaf(task_fact: dict) -> dict:
+        full_val = str(task_fact.get("value") or "").strip()
+        short_val = task_fact.get("short_title") or summarize_node_title(full_val, max_chars=20)
+        return {
+            "fact_id": task_fact.get("id"),
+            "label": short_val,
+            "full_label": full_val,
+            "task_state": task_fact.get("task_state") or "pending",
+            "status": task_fact.get("status", "proposed"),
+            "evidence_ids": list(task_fact.get("evidence_ids") or [])[:2],
+        }
+
+    chosen_branches = [b for b in branches if b["state"] == "chosen"]
+    unmatched_tasks: list[dict] = []
+    for task_fact in tasks[:10]:
+        task_ev = set(task_fact.get("evidence_ids") or [])
+        task_prefix = str(task_fact.get("subject_key") or "").split(".", 1)[0]
+        target_branch = None
+        for b in chosen_branches:
+            if len(b["children"]) >= 4:
+                continue
+            if task_ev & set(b.get("evidence_ids") or []):
+                target_branch = b
+                break
+        if target_branch is None and task_prefix:
+            for b in chosen_branches:
+                if len(b["children"]) < 4 and b.get("_subject_prefix") == task_prefix:
+                    target_branch = b
+                    break
+        if target_branch is None and len(chosen_branches) == 1 and len(chosen_branches[0]["children"]) < 4:
+            target_branch = chosen_branches[0]
+        if target_branch is not None:
+            target_branch["children"].append(_make_task_leaf(task_fact))
+        else:
+            unmatched_tasks.append(_make_task_leaf(task_fact))
+
+    for b in chosen_branches:
+        b.pop("_subject_prefix", None)
+
+    if unmatched_tasks:
+        first_unmatched = unmatched_tasks[0]
+        branches.append({
+            "branch_id": "exec-main",
+            "fact_id": first_unmatched["fact_id"],
+            "kind": "execution",
+            "state": "chosen",
+            "status": first_unmatched.get("status", "proposed"),
+            "label": "待填坑位与待办" if chosen_branches else "待办执行清单",
+            "full_label": "尚未挂靠具体决策分支的待办与坑位",
+            "evidence_ids": first_unmatched["evidence_ids"],
+            "children": unmatched_tasks[:6],
+        })
 
     superseded_facts = [
-        {"fact_id": f.get("id"), "label": str(f.get("value") or "")[:48], "status": (f.get("source_state") or {}).get("status")}
+        {"fact_id": f.get("id"), "label": f.get("short_title") or summarize_node_title(f.get("value") or "", max_chars=22), "status": (f.get("source_state") or {}).get("status")}
         for f in facts
         if (f.get("source_state") or {}).get("status") in {"superseded", "unavailable"}
     ]
@@ -191,9 +362,16 @@ def _build_thinking_line(facts: list[dict], directions: dict, structure: dict) -
                 "direct": node.get("id") in direct,
             })
 
+    historical_archive = {
+        "count": len(historical_items),
+        "label": f"历史文档参考（{len(historical_items)} 条）" if historical_items else "",
+        "items": historical_items[:24],
+    }
+
     return {
         "root": root,
         "branches": branches,
+        "historical_archive": historical_archive,
         "reversals": superseded_facts,
         "code_nodes": code_nodes,
     }
@@ -236,13 +414,14 @@ def _build_session_presence(views: dict, review_queue: list[dict], accepted_subj
 
 def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict], structure: dict) -> dict:
     team_facts = views["team"].get("facts") or []
-    goals = [f for f in team_facts if f.get("kind") == "goal"]
-    focus_goal = next((f for f in goals if f.get("status") == "accepted"), goals[-1] if goals else None)
+    focus_goal = select_primary_goal(team_facts)
+    next_consensus = select_next_consensus(team_facts)
     accepted_decisions = [
         {
             "fact_id": f.get("id"),
             "kind": f.get("kind"),
             "value": f.get("value"),
+            "clean_value": f.get("clean_value") or clean_display_text(f.get("value") or ""),
             "author": f.get("author"),
             "evidence_ids": list(f.get("evidence_ids") or [])[:3],
         }
@@ -262,38 +441,46 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
         }
         for item in review_queue[:8]
     ]
+    all_task_facts = [f for f in team_facts if f.get("kind") == "task"]
+    live_task_facts = [f for f in all_task_facts if not is_historical_doc_fact(f)]
+    chosen_task_facts = live_task_facts or all_task_facts
     todos = [
         {
             "fact_id": f.get("id"),
-            "value": f.get("value"),
+            "value": f.get("clean_value") or clean_display_text(f.get("value") or ""),
             "task_state": f.get("task_state") or "pending",
             "status": f.get("status"),
             "author": f.get("author") or "session",
             "evidence_ids": list(f.get("evidence_ids") or [])[:3],
         }
-        for f in team_facts
-        if f.get("kind") == "task"
+        for f in chosen_task_facts
     ][:8]
     conflicts = views["team"].get("conflicts") or []
     thinking = views["team"].get("thinking_line") or {}
     code_nodes = thinking.get("code_nodes") or []
 
     goal_line = (
-        f"- **当前核心目标 ({focus_goal.get('status')})**: {focus_goal.get('value')} "
+        f"- **当前核心目标 ({focus_goal.get('status')})**: {clean_display_text(focus_goal.get('value') or '')} "
         f"`[{', '.join(focus_goal.get('evidence_ids') or [])}]`"
         if focus_goal
         else "- **当前核心目标**: 暂无目标候选"
     )
+    next_line = (
+        f"- **下一步工作共识 ({next_consensus.get('status')})**: {next_consensus.get('clean_value') or clean_display_text(next_consensus.get('value') or '')} "
+        f"`[{', '.join(next_consensus.get('evidence_ids') or [])}]`"
+        if next_consensus
+        else "- **下一步工作共识**: 暂未设定"
+    )
     dec_lines = (
         "\n".join(
-            f"- **[Team Truth · {d['kind']}]** {d['value']} `[{', '.join(d['evidence_ids'])}]`"
+            f"- **[Team Truth · {d['kind']}]** {d['clean_value']} `[{', '.join(d['evidence_ids'])}]`"
             for d in accepted_decisions[:6]
         )
         or "- 暂无已确认团队决策（请在看板上点击 `✓ 采纳` 晋升候选事实）"
     )
     cand_lines = (
         "\n".join(
-            f"- **[Candidate · {c['author']}]** {c['value']} `[{', '.join(c['evidence_ids'])}]`"
+            f"- **[Candidate · {c['author']}]** {clean_display_text(c['value'])} `[{', '.join(c['evidence_ids'])}]`"
             for c in pending_candidates[:6]
         )
         or "- 当前无待审候选"
@@ -312,20 +499,37 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
     )
     md = (
         f"# ✦ {project_name} · 1-Minute Handoff Brief (项目一分钟交接简报)\n\n"
-        f"## 1. 核心焦点 (Session Summary & Focus)\n{goal_line}\n\n"
+        f"## 1. 核心焦点 (Session Summary & Focus)\n{goal_line}\n{next_line}\n\n"
         f"## 2. 已确认团队共识 (Confirmed Team Truth)\n{dec_lines}\n\n"
         f"## 3. 待确认会话候选 (Pending Candidates)\n{cand_lines}\n\n"
         f"## 4. 下一步行动与待办 (Next Steps & Action Items)\n{todo_lines}\n\n"
         f"## 5. 关联代码结构 (Linked Code Modules)\n{code_lines}\n"
     )
+    next_consensus_summary = None
+    if next_consensus is not None:
+        next_val = str(next_consensus.get("value") or "").strip()
+        next_consensus_summary = {
+            "fact_id": next_consensus.get("id"),
+            "kind": next_consensus.get("kind"),
+            "value": next_val,
+            "clean_value": next_consensus.get("clean_value") or clean_display_text(next_val),
+            "short_title": next_consensus.get("short_title") or summarize_node_title(next_val, max_chars=24),
+            "status": next_consensus.get("status", "proposed"),
+            "author": next_consensus.get("author"),
+            "is_candidate_suggestion": bool(next_consensus.get("is_candidate_suggestion")),
+            "evidence_ids": list(next_consensus.get("evidence_ids") or [])[:3],
+        }
     return {
         "project_name": project_name,
         "focus_goal": {
             "fact_id": focus_goal.get("id") if focus_goal else None,
             "value": focus_goal.get("value") if focus_goal else "当前核心目标待确立",
+            "clean_value": clean_display_text(focus_goal.get("value") or "") if focus_goal else "当前核心目标待确立",
+            "short_title": (focus_goal.get("short_title") or summarize_node_title(focus_goal.get("value") or "", max_chars=28)) if focus_goal else "核心目标待定锚",
             "status": focus_goal.get("status", "proposed") if focus_goal else "empty",
             "evidence_ids": list(focus_goal.get("evidence_ids") or [])[:3] if focus_goal else [],
         },
+        "next_consensus": next_consensus_summary,
         "accepted_decisions": accepted_decisions,
         "pending_candidates": pending_candidates,
         "open_todos": todos,
@@ -353,6 +557,10 @@ def build_dashboard_state(
             accepted_by_subject[str(item.get("subject_key", item["fact_id"]))] = item["fact_id"]
     accepted_fact_ids = list(accepted_by_subject.values())
     views = build_views(events, accepted_fact_ids=accepted_fact_ids, session_members=session_members, fact_reviews=fact_reviews)
+    events_by_id = {ev.id: ev for ev in events}
+    _enrich_fact_titles(views["team"].get("facts") or [], events_by_id)
+    for member_view in (views.get("personal") or {}).values():
+        _enrich_fact_titles(member_view.get("facts") or [], events_by_id)
     index = build_evidence_index(events, facts).with_candidate_relations(build_requested_evidence_relations(events, facts, review_history)).with_confirmed_relations(confirmed_relations)
     team_facts = views["team"]["facts"]
     accepted_subjects = {fact["subject_key"] for fact in team_facts if fact["status"] == "accepted"}
@@ -507,17 +715,30 @@ def build_dashboard_state(
             "related_edge_ids": [edge.id for edge in visible_edges if edge.id in related_edge_id_set],
             "evidence_source_refs": sorted(evidence_refs & {node.source_ref for node in nodes}),
         }
+    team_fallback_goal = select_primary_goal(views["team"].get("facts") or [])
     views["team"]["timeline_chapters"] = _build_timeline_chapters(views["team"].get("facts") or [], views["team"].get("directions") or {})
     views["team"]["thinking_line"] = _build_thinking_line(views["team"].get("facts") or [], views["team"].get("directions") or {}, structure)
     for member_view in views["personal"].values():
         m_facts = member_view.get("facts") or []
         m_dirs = member_view.get("directions") or {}
         member_view["timeline_chapters"] = _build_timeline_chapters(m_facts, m_dirs)
-        member_view["thinking_line"] = _build_thinking_line(m_facts, m_dirs, structure)
+        member_view["thinking_line"] = _build_thinking_line(m_facts, m_dirs, structure, fallback_goal=team_fallback_goal)
+        if not any(f.get("kind") == "goal" for f in m_facts) and team_fallback_goal is not None:
+            member_view["fallback_goal"] = dict(team_fallback_goal)
     project_name = Path(project_path).name if project_path else "Project Compass"
     session_presence = _build_session_presence(views, review_queue, accepted_subjects, latest_review_by_fact)
     handoff_brief = _build_handoff_brief(project_name, views, review_queue, structure)
-    return {
+    index_payload = index.to_dict()
+    for catalog_item in index_payload.get("evidence") or []:
+        src_ev = events_by_id.get(catalog_item.get("id"))
+        if (
+            src_ev is not None
+            and is_public_raw_event(src_ev)
+            and not is_platform_control(src_ev.content, kind=src_ev.kind)
+            and SENSITIVE.search(src_ev.content) is None
+        ):
+            catalog_item["search_excerpt"] = src_ev.content[:2000]
+    state = {
         "project": {
             "name": project_name,
             "path": project_path,
@@ -529,11 +750,16 @@ def build_dashboard_state(
         "team": views["team"],
         "session_presence": session_presence,
         "handoff_brief": handoff_brief,
+        "next_consensus": handoff_brief.get("next_consensus"),
         "review_history": list(review_history),
         "fact_reviews": list(fact_reviews),
         "personal_activity": sorted(activity.values(), key=lambda item: item["member_id"]),
+        "activity_stream": build_session_activity_stream(events, session_members=session_members),
         "team_review_queue": review_queue,
         "evidence_requests": evidence_requests,
         "derived_context": structure,
-        **index.to_dict(),
+        "llm_status": public_llm_status(),
+        **index_payload,
     }
+    state["agent_hints"] = build_local_agent_hints(state)
+    return state

@@ -83,6 +83,17 @@ def literal_terms(question):
             for size in (4, 3, 2)
             for index in range(len(chunk) - size + 1)
         )
+    _CJK_PARTICLES = frozenset(
+        "的地得了着过是为有在和与及或把被让给对从向到于已曾正将要会能可吗呢吧啊呀么谁哪这个些条项处上下中里外"
+    )
+    if not terms:
+        stripped_q = str(question or "")
+        raw_norm = unicodedata.normalize("NFKC", stripped_q[:32]).casefold().strip()
+        if stripped_q == stripped_q.strip() and 1 <= len(raw_norm) <= 4:
+            if len(raw_norm) == 1 and "\u3400" <= raw_norm <= "\u9fff" and raw_norm not in _CJK_PARTICLES:
+                terms.append(("han", raw_norm))
+            elif re.fullmatch(r"[a-z0-9]{2,4}", raw_norm) and raw_norm not in {"why", "how", "who", "what", "the", "and", "for"}:
+                terms.append(("ascii", raw_norm))
     return list(dict.fromkeys(terms))[:256]
 
 

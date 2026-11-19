@@ -70,7 +70,7 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn("observed_at", script)
         self.assertIn("evidence-filter", html)
         self.assertIn("筛选证据", html)
-        self.assertIn("Ask Compass", html)
+        self.assertIn("查证据", html)
 
     def test_layout_allows_long_evidence_titles_without_page_overflow(self):
         css = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")

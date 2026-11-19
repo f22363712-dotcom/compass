@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone, tzinfo
+import os
 from pathlib import Path
 import re
+import sys
 import threading
 import time
 from typing import Any
 import unicodedata
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 SENSITIVE = re.compile(
     r"配对码|API.?KEY|Bearer\s|sk-[A-Za-z0-9]|密码|私钥|<environment_context>|<system-reminder>"
@@ -24,7 +32,15 @@ DOCUMENT_RECORD_KINDS = frozenset({"file_snapshot", "file_unavailable", "git_com
 _PLATFORM_TAG_RE = re.compile(r"<(?P<tag>external_codex_apps_[a-z_]+|codex_internal_context)(?:\s+[^<>]*)?>")
 _DATE_SPACE_TIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?.*)$")
 _IO_LOCK_GUARD = threading.Lock()
-_PATH_LOCKS: dict[Path, threading.RLock] = {}
+_PATH_LOCKS: dict[str, threading.RLock] = {}
+_ACTIVE_OS_LOCKS: set[str] = set()
+
+
+def _canonical_path_key(target: str | Path) -> str:
+    raw = os.path.abspath(os.path.expanduser(os.fspath(target)))
+    if raw.startswith("\\\\?\\"):
+        raw = raw[4:]
+    return os.path.normcase(raw)
 
 
 def is_platform_control(content: str, *, kind: str | None = None) -> bool:
@@ -97,16 +113,66 @@ def as_utc_timestamp(value: datetime | str) -> datetime:
 
 def path_lock(target: str | Path) -> threading.RLock:
     """Return the reentrant in-process lock bound to a normalized filesystem path."""
-    resolved = Path(target).expanduser().resolve()
+    key = _canonical_path_key(target)
     with _IO_LOCK_GUARD:
-        lock = _PATH_LOCKS.get(resolved)
+        lock = _PATH_LOCKS.get(key)
         if lock is None:
             lock = threading.RLock()
-            _PATH_LOCKS[resolved] = lock
+            _PATH_LOCKS[key] = lock
         return lock
 
 
 _path_lock = path_lock
+
+
+@contextmanager
+def interprocess_file_lock(target: str | Path, timeout: float = 5.0):
+    """Acquire both in-process RLock and OS advisory lock on a sibling ``.lock`` file."""
+    key = _canonical_path_key(target)
+    raw = os.path.abspath(os.path.expanduser(os.fspath(target)))
+    clean_target = Path(raw[4:] if raw.startswith("\\\\?\\") else raw)
+    lock_file = clean_target.with_name(f"{clean_target.name}.lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with path_lock(clean_target):
+        if key in _ACTIVE_OS_LOCKS:
+            yield
+            return
+        handle = open(lock_file, "a+b")
+        acquired = False
+        try:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\x00")
+                handle.flush()
+            deadline = time.monotonic() + max(0.1, float(timeout))
+            delay = 0.005
+            while not acquired:
+                try:
+                    handle.seek(0)
+                    if sys.platform == "win32":
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(f"timed out acquiring lock for {clean_target}") from exc
+                    time.sleep(delay)
+                    delay = min(0.05, delay * 1.5)
+            _ACTIVE_OS_LOCKS.add(key)
+            yield
+        finally:
+            _ACTIVE_OS_LOCKS.discard(key)
+            if acquired:
+                try:
+                    handle.seek(0)
+                    if sys.platform == "win32":
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            handle.close()
 
 
 def atomic_write_text(path: str | Path, content: str, *, encoding: str = "utf-8") -> Path:

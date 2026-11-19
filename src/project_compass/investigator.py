@@ -19,6 +19,7 @@ from .intent_vocab import (
     MEMBER_UNFINISHED_TERMS,
     TRANSLATION_EXCLUSION_TERMS,
     WHY_STATE_QUERY_TERMS,
+    is_recent_completed_query,
 )
 from .models import CandidateFact, EvidenceEvent, FactKind
 from .source_currentness import source_states, needs_source_review
@@ -26,6 +27,82 @@ from .literal_relevance import rank_literal
 from .raw_source_investigation import extend_raw_sources, raw_requests, raw_scope_question
 from .directions import extend_direction_answer, direction_requested
 from .derived_context import fact_chain_of_recall, analyze_contract_risk
+from .text_summary import clean_display_text
+
+
+def _is_static_doc_fact(fact: CandidateFact) -> bool:
+    if fact.author == "project-documents":
+        return True
+    return any(str(eid).startswith("scan-file-") for eid in (fact.evidence_ids or ()))
+
+
+_COMPLETED_SEMANTIC_TERMS = (
+    "已完成",
+    "已验收",
+    "已接通",
+    "已实现",
+    "已交付",
+    "已落地",
+    "跑通",
+    "封板",
+    "封存",
+    "闭环",
+    "收口",
+    "联调验证通过",
+    "就绪",
+    "completed",
+    "shipped",
+    "adopted",
+)
+_COMPLETED_NEGATIVE_TERMS = ("未完成", "待完成", "尚未", "unfinished", "pending")
+
+
+def _is_completed_fact(fact: CandidateFact) -> bool:
+    if fact.task_state in {"pending", "active", "blocked"}:
+        return False
+    if fact.kind is FactKind.TASK and fact.task_state == "reported_complete":
+        return True
+    if fact.kind is FactKind.DECISION:
+        text = f"{fact.quote or ''} {fact.value or ''}"
+        lower = text.casefold()
+        if any(neg in lower for neg in _COMPLETED_NEGATIVE_TERMS):
+            return False
+        return any(tok in lower for tok in _COMPLETED_SEMANTIC_TERMS)
+    return False
+
+
+def _completed_sort_key(
+    fact: CandidateFact,
+    sources: dict[str, EvidenceEvent],
+    is_accepted: bool,
+) -> tuple:
+    text = f"{fact.quote or ''} {fact.value or ''}"
+    explicit_dates = re.findall(r"20\d{2}-\d{2}-\d{2}", text)
+    src = sources.get(fact.evidence_ids[0]) if fact.evidence_ids else None
+    src_meta = src.metadata if (src is not None and isinstance(src.metadata, dict)) else {}
+    src_mod = str(src_meta.get("source_modified_at") or "")
+    if explicit_dates:
+        date_key = max(explicit_dates)
+    elif len(src_mod) >= 10:
+        date_key = src_mod[:10]
+    else:
+        date_key = fact.observed_at.isoformat()[:10]
+    versions = [
+        (int(a), int(b), int(c or 0))
+        for a, b, c in re.findall(r"\bv(\d+)\.(\d+)(?:\.(\d+))?\b", text, re.I)
+    ]
+    ver_key = max(versions) if versions else (0, 0, 0)
+    m_stages = [int(m) for m in re.findall(r"\bM(\d+)\b", text)]
+    m_key = max(m_stages) if m_stages else -1
+    live_priority = 0 if _is_static_doc_fact(fact) else 1
+    return (
+        date_key,
+        ver_key,
+        m_key,
+        1 if is_accepted else 0,
+        fact.observed_at.isoformat(),
+        live_priority,
+    )
 
 
 @dataclass(frozen=True)
@@ -65,9 +142,10 @@ class InvestigationAnswer:
     next_action_basis: dict | None = None
     chain_of_recall: tuple[dict, ...] = ()
     contract_risk: tuple[dict, ...] = ()
+    completed_items: tuple[dict, ...] = ()
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "question": self.question,
             "conclusion": self.conclusion,
             "goal": self.goal,
@@ -87,6 +165,9 @@ class InvestigationAnswer:
             'chain_of_recall': list(self.chain_of_recall),
             'contract_risk': list(self.contract_risk),
         }
+        if self.completed_items:
+            payload["completed_items"] = list(self.completed_items)
+        return payload
 
 
 def _is_clean_raw_event(event: EvidenceEvent) -> bool:
@@ -140,14 +221,21 @@ def _member_query(events, facts, question, session_members, *, raw_query=False, 
     actions=r'下一步|接下来|当前状态|状态|进展|做了|做过|负责|\b(?:next|status|progress|tasks?|decisions?)\b'
     if raw_query:actions+=r'|命令|终端|测试|工具|(?<![a-z0-9_])(?:git|commits?|commands?|terminal|tests?|tools?)(?![a-z0-9_])'
     if direction_query:actions+=r'|舍弃|放弃|暂缓|延期|恢复|\b(?:abandon|abandoned|defer|deferred|discard|restore)\b'
-    action_subject = re.split(actions,query,maxsplit=1)[0].strip(' ，,？?。.!')
+    clauses = [seg.strip() for seg in re.split(r'[？?。！!；;\n]+', query) if seg.strip()]
+    target_clause = next((seg for seg in clauses if re.search(actions, seg)), query)
+    action_subject = re.split(actions, target_clause, maxsplit=1)[0].strip(' ，,？?。.!')
     direction_prefix=action_subject
     if raw_query or direction_query:
         action_subject=re.sub(r'请问|请|查看|查询|看看|最近|最新|目前|当前|原始|失败|成功|的|\b(?:show|list|find|recent|latest|raw|the|what|are|is)\b',' ',action_subject).strip()
-    generic_subjects = {'', '我们', '我', '现在', '目前', '当前', '然后', '接着', 'what', 'what should we do',
+    generic_subjects = {'', '我们', '我', '咱们', '大家', '现在', '目前', '当前', '然后', '接着', 'what', 'what should we do',
                         'what should i do', 'what should happen', 'what is', 'what are', 'how is', 'how are', 'do'}
-    unknown_subject = action_subject != query.strip(' ，,？?。.!') and action_subject not in generic_subjects and not any(
-        term in action_subject for term in ('项目', '团队', '整体', '全局', 'project', 'team', '为什么', 'why'))
+    unknown_subject = action_subject != target_clause.strip(' ，,？?。.!') and action_subject not in generic_subjects and not any(
+        term in action_subject for term in (
+            '项目', '团队', '整体', '全局', '目标', '工作', '共识', '任务', '方案', '方向', '功能', '模块',
+            '问题', '看板', '脑图', '搜索', '检索', '什么', '哪些', '哪个', '怎么', '如何', '是否', '有没有',
+            'project', 'team', 'goal', 'why', 'what', 'which', 'how',
+        )
+    )
     if direction_query and not raw_query:
         explicit_member=bool(re.search(r'(?:的|[\u2019\x27]s)\s*$',direction_prefix) or re.fullmatch(r'[a-z0-9_-]+',direction_prefix))
         unknown_subject=unknown_subject and explicit_member and not any(term in direction_prefix for term in ('方案','方向','功能','模块','任务','哪些','什么'))
@@ -257,7 +345,13 @@ def _select_question_findings(
         and fact.task_state in {"pending", "active", "blocked"}
         and current_accepted.get(fact.subject_key) in (None, fact.id)
     ]
-    pending.sort(key=lambda fact: status_fn(fact) != "accepted")
+    pending.sort(
+        key=lambda fact: (
+            status_fn(fact) != "accepted",
+            _is_static_doc_fact(fact) and status_fn(fact) != "accepted",
+            fact.subject_key != "project.next_step",
+        )
+    )
     member_pending = [
         fact
         for fact in extracted
@@ -284,7 +378,12 @@ def _select_question_findings(
     elif any(term in query for term in MEMBER_NEXT_TERMS) and not any(
         term in query for term in ("为什么", "why", "状态", "state")
     ):
-        selected = pending
+        if any(term in query for term in ("目标", "goal")):
+            goal_facts = [fact for fact in extracted if fact.kind is FactKind.GOAL]
+            goal_facts.sort(key=lambda fact: (status_fn(fact) != "accepted", _is_static_doc_fact(fact)))
+            selected = goal_facts[:1] + pending
+        else:
+            selected = pending
     elif gap_query:
         selected = [fact for fact in extracted if status_fn(fact) != "accepted"]
         finding_pool = extracted
@@ -295,19 +394,23 @@ def _select_question_findings(
             + pending
         )
         finding_pool = extracted
-    elif any(term in query for term in GENERAL_QUESTION_TERMS) and not any(
-        term in query for term in TRANSLATION_EXCLUSION_TERMS
-    ):
-        selected = rank_literal(question, extracted, [], text=lambda fact: fact.quote or fact.value)
-        finding_pool = selected
-    else:
+    elif any(term in query for term in TRANSLATION_EXCLUSION_TERMS):
         selected = []
         gaps.append("当前调查仅支持方向变化、未完成或未验证事项、当前状态及下一步问题；此问题尚未得到回答。")
+    else:
+        selected = rank_literal(
+            question,
+            extracted,
+            [],
+            text=lambda fact: f"{fact.quote or fact.value} {fact.subject_key}",
+        )
+        finding_pool = selected
     return list({fact.id: fact for fact in selected}.values()), finding_pool, pending
 
 
 def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, memory_facts, memory_support, session_members, raw_query, current_member=None, derived_context=None):
     facts = derive_facts(events) if memory_facts is None else memory_facts
+    all_facts = list(facts)
     scope_question=question
     scope, member_sources = _member_query(events, facts, scope_question, session_members,raw_query=raw_query,direction_query=direction_requested(question), current_member=current_member)
     if scope:
@@ -385,7 +488,9 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
                 sources[fact.evidence_ids[0]].kind if fact.evidence_ids and fact.evidence_ids[0] in sources else None,
                 fact.session_id) for fact in candidates)))
     accepted_goals = [fact for fact in goals if status(fact) == "accepted"]
-    goal = (accepted_goals or goals)[0].value if (accepted_goals or goals) else "未找到已记录的项目目标"
+    live_goals = [fact for fact in goals if not _is_static_doc_fact(fact)]
+    chosen_goal_fact = accepted_goals[-1] if accepted_goals else (live_goals[-1] if live_goals else (goals[-1] if goals else None))
+    goal = chosen_goal_fact.value if chosen_goal_fact else "未找到已记录的项目目标"
     active_tasks = tuple(
         fact.value
         for fact in tasks
@@ -424,10 +529,26 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
     if warnings and not current_facts:
         conclusion = '现有声明的文件来源已变化或不可用，尚无可用于当前状态结论的候选；请先复核来源。'
     findings = []
+    completed_items: tuple[dict, ...] = ()
     next_action_status = None
     next_action_basis = None
+    recent_completed_mode = is_recent_completed_query(question)
     extracted = sorted([fact for fact in member_current if fact.quote or scope], key=lambda fact: fact.observed_at, reverse=True)
     if extracted:
+        completed_facts: list[CandidateFact] = []
+        if recent_completed_mode:
+            completed_facts = [fact for fact in extracted if _is_completed_fact(fact)]
+            if not completed_facts and (not scope or scope.get("member_id") == current_member):
+                completed_facts = [
+                    fact
+                    for fact in all_facts
+                    if not needs_source_review(states.get(fact.id, {})) and _is_completed_fact(fact)
+                ]
+            completed_facts.sort(
+                key=lambda fact: _completed_sort_key(fact, sources, status(fact) == "accepted"),
+                reverse=True,
+            )
+
         selected, finding_pool, pending = _select_question_findings(
             extracted, question, scope, status, gaps, gap_query, current_accepted
         )
@@ -435,11 +556,43 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
         if scope:
             ranking_question = re.sub(r'(?<![A-Za-z0-9_-])' + re.escape(scope['member_id']) +
                                       r'(?![A-Za-z0-9_-])', ' ', question, flags=re.I)
-        pool = selected if finding_pool is None else finding_pool
-        ranked_facts = rank_literal(ranking_question, pool, [], text=lambda fact: fact.quote or fact.value)
-        selected = ranked_facts or selected
+        if recent_completed_mode and completed_facts:
+            top_completed = completed_facts[:3]
+            selected = top_completed
+            ranked_facts = top_completed
+            completed_items = tuple(finding(fact) for fact in top_completed)
+            for item in completed_items:
+                for eid in item.get("evidence_ids") or ():
+                    if eid not in evidence_ids:
+                        evidence_ids = (*evidence_ids, eid)
+        else:
+            pool = selected if finding_pool is None else finding_pool
+            ranked_facts = rank_literal(ranking_question, pool, [], text=lambda fact: f"{fact.quote or fact.value} {fact.subject_key}")
+            if finding_pool is not None and len(finding_pool) == 0:
+                selected = []
+            else:
+                selected = ranked_facts or selected
+        # When querying next-step on real repo data, avoid promoting legacy static plan checkboxes as findings
+        if selected and not recent_completed_mode and not scope and any(term in question.casefold() for term in MEMBER_NEXT_TERMS):
+            live_sel = [f for f in selected if not _is_static_doc_fact(f) or status(f) == "accepted"]
+            if live_sel:
+                selected = live_sel
+        if (
+            not recent_completed_mode
+            and not scope
+            and any(term in question.casefold() for term in MEMBER_NEXT_TERMS)
+            and any(term in question.casefold() for term in ("目标", "goal"))
+        ):
+            anchor_pair = []
+            if chosen_goal_fact is not None and chosen_goal_fact in extracted:
+                anchor_pair.append(chosen_goal_fact)
+            if pending:
+                anchor_pair.append(pending[0])
+            selected = list({f.id: f for f in [*anchor_pair, *selected]}.values())
         for fact in selected[:3]:
             findings.append(finding(fact))
+        raw_hits: list[EvidenceEvent] = []
+        promote_raw_findings = len(findings) == 0
         if not ranked_facts and not any("尚未得到回答" in gap for gap in gaps):
             current_snapshot_ids = {snap.id for snap in current_file_snapshots(events)}
             raw_pool = [
@@ -452,25 +605,74 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
                 and (not scope or resolve_member_id(event, session_members=session_members, route_documents=True) == scope["member_id"])
             ]
             raw_hits = rank_literal(ranking_question, raw_pool, [], text=lambda event: event.content)
-            for raw_event in raw_hits[:2]:
+            for raw_event in raw_hits[:3]:
                 lines = [ln.strip() for ln in raw_event.content.splitlines() if ln.strip()]
                 best_lines = rank_literal(ranking_question, lines, lines[:2], text=lambda ln: ln)
-                excerpt = " ".join(best_lines[:2])[:260]
-                gaps.append(f"事实层未覆盖该问题，原始来源线索 [{raw_event.id}]：{excerpt}")
+                excerpt = " ".join(best_lines[:2])[:320]
+                if promote_raw_findings:
+                    src_ref = raw_event.metadata.get("source_ref") if isinstance(raw_event.metadata, dict) else None
+                    findings.append({
+                        "quote": excerpt or raw_event.content[:320],
+                        "status": "raw",
+                        "claim_type": source_claim_type(raw_event),
+                        "member_id": resolve_member_id(raw_event, session_members=session_members, route_documents=True),
+                        "observed_at": raw_event.observed_at.isoformat(),
+                        "evidence_ids": [raw_event.id],
+                        "source_kind": raw_event.kind,
+                        "session_id": raw_event.session_id,
+                        "source_ref": src_ref,
+                        "excerpt_truncated": len(raw_event.content) > 320,
+                    })
+                else:
+                    gaps.append(f"事实层未覆盖该问题，原始来源线索 [{raw_event.id}]：{excerpt}")
                 if raw_event.id not in evidence_ids:
                     evidence_ids = (*evidence_ids, raw_event.id)
-        if not unresolved and pending:
-            next_action = pending[0].value
-            next_action_status = status(pending[0])
-            next_action_basis = finding(pending[0])
-            acceptance = "按来源原文核对该待办的结果与验收条件；尚未确认的完成报告须由项目负责人审核。"
+        has_settled_next_step = bool(
+            not scope
+            and pending
+            and pending[0].subject_key == "project.next_step"
+            and status(pending[0]) == "accepted"
+        )
+        if has_settled_next_step:
+            chosen_next = pending[0]
+            next_action = clean_display_text(chosen_next.value)
+            next_action_status = status(chosen_next)
+            next_action_basis = finding(chosen_next)
+            acceptance = "按已定案的下一步工作共识推进，并在完成后更新看板记录。"
+            if unresolved:
+                gaps.append(f"另有 {len(unresolved)} 处历史或分支分歧待核对，详情见看板分歧对照。")
+        elif not unresolved and pending:
+            chosen_pending = pending[0]
+            only_static_pending = _is_static_doc_fact(chosen_pending) and status(chosen_pending) != "accepted"
+            live_cands = [f for f in extracted if not _is_static_doc_fact(f) and status(f) != "accepted"]
+            if only_static_pending and not scope and live_cands:
+                live_lead = next((f for f in live_cands if f.kind in {FactKind.DECISION, FactKind.ASSUMPTION}), live_cands[0])
+                next_action = f"核对并定案活跃候选「{clean_display_text(live_lead.value, max_chars=48)}」，并在看板设定当前下一步。"
+                next_action_status = status(live_lead)
+                next_action_basis = finding(live_lead)
+                acceptance = "确认或改写上述活跃候选，历史计划文档勾选不自动作为当前下一步。"
+            else:
+                next_action = chosen_pending.value if scope else clean_display_text(chosen_pending.value)
+                next_action_status = status(chosen_pending)
+                next_action_basis = finding(chosen_pending)
+                acceptance = "按来源原文核对该待办的结果与验收条件；尚未确认的完成报告须由项目负责人审核。"
         if any(status(fact) != "accepted" for fact in extracted):
-            gaps.append("部分来源声明仍待负责人确认；已确认条目单独标记为 accepted。")
-        gaps.append("本次提取覆盖选定材料片段，尚未核验全部历史及版本替代关系。")
-        gaps.append('来源可读取不代表历史报告仍适用于当前版本；候选任务须核对来源时间与版本。')
-        conclusion = f"来源记录的项目目标为“{goal}”。下方列出与问题相关的原文声明，确认状态分别保留。"
-        if not selected:
-            gaps.append("没有找到与该问题类型对应的候选原文。")
+            gaps.append("部分来源声明仍待负责人确认；已确认条目单独标记为已定案。")
+        gaps.append("本次检索覆盖当前有效记录，未确认条目的适用性仍需结合来源时间核对。")
+        clean_goal = clean_display_text(goal, max_chars=52)
+        if completed_items:
+            latest_completed_text = clean_display_text(completed_items[0].get("quote") or "", max_chars=64)
+            if next_action_status == "accepted" or pending:
+                conclusion = f"近期已完成：{latest_completed_text}；当前下一步：{clean_display_text(next_action, max_chars=52)}。"
+            else:
+                conclusion = f"近期已完成：{latest_completed_text}（共检索到 {len(completed_items)} 条最新完成记录）。"
+        elif findings:
+            conclusion = f"围绕核心目标“{clean_goal}”，检索到 {len(findings)} 条直接相关记录；当前下一步：{clean_display_text(next_action, max_chars=56)}。"
+        elif any("尚未得到回答" in gap for gap in gaps):
+            conclusion = f"当前问题不属于项目事实检索范围；项目目标为“{clean_goal}”。"
+        else:
+            conclusion = f"暂未检索到与“{question[:32]}”直接匹配的条目；当前项目目标为“{clean_goal}”。"
+            gaps.append("未找到与该关键词或问题直接匹配的记录。")
     if scope:
         member = scope['member_id']
         goal = f'{member} 的记录'
@@ -512,5 +714,5 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
             for r in analyze_contract_risk(derived_context, source_ref=ref):
                 if r not in contract_risks:
                     contract_risks.append(r)
-    return InvestigationAnswer(question, conclusion, goal, active_tasks, evidence_ids, tuple(assumptions), tuple(conflicts), next_action, acceptance, tuple(gaps), tuple(findings), next_action_status, warnings, scope, next_action_basis, chain_of_recall=tuple(chains), contract_risk=tuple(contract_risks))
+    return InvestigationAnswer(question, conclusion, goal, active_tasks, evidence_ids, tuple(assumptions), tuple(conflicts), next_action, acceptance, tuple(gaps), tuple(findings), next_action_status, warnings, scope, next_action_basis, chain_of_recall=tuple(chains), contract_risk=tuple(contract_risks), completed_items=completed_items)
 

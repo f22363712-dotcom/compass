@@ -6,6 +6,13 @@ from hashlib import sha1
 from pathlib import Path
 from typing import Any
 
+from .text_summary import (
+    is_historical_doc_fact,
+    select_next_consensus,
+    select_primary_goal,
+    summarize_node_title,
+)
+
 PROTOCOL_VERSION = 1
 
 
@@ -107,45 +114,98 @@ def build_compact_project_context(
     state: dict[str, Any] | None = None,
     events: list[Any] | None = None,
 ) -> dict[str, Any]:
-    """Produce an Inline & Spill compact context representation."""
+    """Produce an Inline & Spill compact context representation with strict baseline isolation."""
     state = state or {}
     team = state.get("team", {})
     team_facts = team.get("facts", [])
 
-    # 1. Inline: Core Goal
+    # 1. Inline: Core Goal & Status (never claim an unconfirmed goal is accepted)
     core_goal = ""
-    handoff_goal = state.get("handoff_brief", {}).get("goal")
-    if handoff_goal:
-        core_goal = handoff_goal
-    else:
-        for fact in team_facts:
-            if fact.get("kind") == "goal":
-                core_goal = fact.get("value") or fact.get("quote") or ""
-                break
+    core_goal_status = "empty"
+    handoff_brief = state.get("handoff_brief", {}) or {}
+    handoff_goal = handoff_brief.get("goal")
+    focus_goal = handoff_brief.get("focus_goal")
+    selected_goal = select_primary_goal(team_facts)
+    accepted_goals = [f for f in team_facts if f.get("kind") == "goal" and f.get("status") == "accepted"]
+
+    if selected_goal is not None and selected_goal.get("status") == "accepted":
+        core_goal = str(selected_goal.get("value") or selected_goal.get("quote") or "").strip()
+        core_goal_status = "accepted"
+    elif handoff_goal:
+        core_goal = str(handoff_goal).strip()
+        core_goal_status = "accepted" if accepted_goals else (selected_goal.get("status", "proposed") if selected_goal else "proposed")
+    elif isinstance(focus_goal, dict) and focus_goal.get("fact_id") and focus_goal.get("value"):
+        core_goal = str(focus_goal.get("value")).strip()
+        core_goal_status = str(focus_goal.get("status") or "proposed")
+    elif selected_goal is not None:
+        core_goal = str(selected_goal.get("value") or selected_goal.get("quote") or "").strip()
+        core_goal_status = str(selected_goal.get("status") or "proposed")
+
     if not core_goal and events:
         for ev in events:
             if getattr(ev, "kind", None) == "goal" or getattr(ev, "metadata", {}).get("kind") == "goal":
-                core_goal = getattr(ev, "content", "")
+                core_goal = str(getattr(ev, "content", "") or "").strip()
+                if core_goal:
+                    core_goal_status = "proposed"
                 break
-    if not core_goal:
-        core_goal = "未记录核心目标"
 
-    # 2. Inline: Latest Accepted Facts (Consensus, top 3-5)
-    accepted = [fact for fact in team_facts if fact.get("status") == "accepted"]
-    if not accepted:
-        accepted = team_facts[:5]
-    else:
-        accepted = accepted[:5]
+    if not core_goal:
+        core_goal = "核心目标待定锚"
+        core_goal_status = "empty"
+
+    next_consensus = state.get("next_consensus") or handoff_brief.get("next_consensus") or select_next_consensus(team_facts)
+
+    # 2. Inline: Strictly Confirmed Baselines ONLY (never promote proposed candidates here)
+    accepted = [fact for fact in team_facts if fact.get("status") == "accepted"][:5]
+    accepted_subjects = {fact.get("subject_key") for fact in accepted if fact.get("subject_key")}
 
     compact_accepted = [
         {
             "id": fact.get("id"),
             "kind": fact.get("kind"),
             "subject_key": fact.get("subject_key"),
+            "short_title": fact.get("short_title") or summarize_node_title(fact.get("value") or fact.get("quote") or "", max_chars=22),
             "summary": str(fact.get("value") or fact.get("quote") or "")[:50],
         }
         for fact in accepted
     ]
+
+    # 2b. Inline: Active Unconfirmed Proposals & Open Pitfalls (anti-drift guardrails)
+    pending_proposals = []
+    open_pitfalls = []
+    for fact in team_facts:
+        status = fact.get("status")
+        kind = fact.get("kind")
+        if status == "rejected":
+            continue
+        if is_historical_doc_fact(fact):
+            continue
+        short_label = fact.get("short_title") or summarize_node_title(fact.get("value") or fact.get("quote") or "", max_chars=22)
+        if status in {"proposed", "conflicted", "needs_evidence"} and fact.get("subject_key") not in accepted_subjects and kind in {"decision", "assumption", "goal"}:
+            pending_proposals.append({
+                "id": fact.get("id"),
+                "kind": kind,
+                "status": status,
+                "short_title": short_label,
+                "warning": "尚未定案，严禁当作已确认需求实现",
+            })
+        if kind == "task" and fact.get("task_state") != "completed":
+            open_pitfalls.append({
+                "id": fact.get("id"),
+                "kind": "task",
+                "short_title": short_label,
+                "task_state": fact.get("task_state") or "pending",
+            })
+        elif kind == "assumption" and status != "accepted":
+            open_pitfalls.append({
+                "id": fact.get("id"),
+                "kind": "assumption",
+                "short_title": short_label,
+                "task_state": "unverified",
+            })
+
+    pending_proposals = pending_proposals[:8]
+    open_pitfalls = open_pitfalls[:6]
 
     # 3. Inline: Pending Conflicts Summary
     raw_conflicts = team.get("conflicts", [])
@@ -205,11 +265,48 @@ def build_compact_project_context(
                 "summary": str(preview)[:50].replace("\n", " ").strip(),
             })
 
+    next_short = ""
+    next_summary = None
+    if isinstance(next_consensus, dict) and (next_consensus.get("value") or next_consensus.get("short_title")):
+        next_short = str(
+            next_consensus.get("short_title")
+            or summarize_node_title(next_consensus.get("value") or "", max_chars=22)
+        )
+        next_summary = {
+            "short_title": next_short,
+            "status": str(next_consensus.get("status") or "proposed"),
+        }
+
+    goal_short = summarize_node_title(core_goal, max_chars=26) if core_goal != "核心目标待定锚" else "核心目标待定锚"
+    if compact_accepted or core_goal_status == "accepted":
+        line_1 = f"已定案基准 {len(compact_accepted)} 条；目标「{goal_short}」（{'已定案' if core_goal_status == 'accepted' else '待拍板'}）。"
+    elif core_goal_status == "proposed":
+        line_1 = f"暂无已定案基准：目标「{goal_short}」及全部讨论仍属待拍板备选，实现前需向用户确认。"
+    else:
+        line_1 = "新项目尚未立目标：首次明确目标或关键取舍时，请调用 record_note 写入 15 字短标题。"
+
+    top_hint = next(iter(state.get("agent_hints") or []), None)
+    hint_tail = ""
+    if isinstance(top_hint, dict) and top_hint.get("text"):
+        hint_tail = f" · 提示：{summarize_node_title(top_hint['text'], max_chars=28)}"
+    elif next_short:
+        hint_tail = f" · 当前下一步「{next_short}」"
+
+    line_2 = (
+        f"待拍板 {len(pending_proposals)} 项 / 未填坑位 {len(open_pitfalls)} 项 / 分歧 {len(compact_conflicts)} 组{hint_tail}；"
+        "遇到分叉或待办记一笔 record_note，报完工前先跑 verify_completion。"
+    )
+    nudge_lines = [line_1, line_2]
+
     inline_data = {
         "core_goal": core_goal,
-        "accepted_facts": compact_accepted,
-        "conflicts": compact_conflicts,
-        "entities": entities,
+        "core_goal_status": core_goal_status,
+        **({"next_consensus": next_summary} if next_summary else {}),
+        "accepted_count": len(compact_accepted),
+        "pending_count": len(pending_proposals),
+        "pitfall_count": len(open_pitfalls),
+        "conflict_count": len(compact_conflicts),
+        "nudge_lines": nudge_lines,
     }
 
     return {
@@ -222,9 +319,13 @@ def build_compact_project_context(
         "inline": inline_data,
         "spills": spills,
         "core_goal": core_goal,
+        "core_goal_status": core_goal_status,
         "accepted_facts": compact_accepted,
+        "pending_proposals": pending_proposals,
+        "open_pitfalls": open_pitfalls,
         "conflicts": compact_conflicts,
         "entities": entities,
+        "nudge_lines": nudge_lines,
     }
 
 

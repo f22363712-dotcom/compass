@@ -10,8 +10,59 @@ from .evidence_filters import parse_iso_timestamp
 from .models import EvidenceEvent
 
 
+_ROOT_DOC_NAMES = (
+    "README.md",
+    "AGENTS.md",
+    "CONTEXT.md",
+    "HANDOFF.md",
+    "DECISIONS.md",
+    "PROGRESS.md",
+)
+_SUBDIR_DOC_DIRS = ("docs", "docs/reviews", "docs/plans", "docs/adr")
+
+
 def _id(kind: str, value: str) -> str:
     return f"scan-{kind}-{hashlib.sha1(value.encode(), usedforsecurity=False).hexdigest()[:12]}"
+
+
+def _candidate_doc_paths(base: Path) -> list[Path]:
+    """Return bounded, deterministic repository markdown paths without crawling asset dirs."""
+    paths = [base / name for name in _ROOT_DOC_NAMES]
+    for relative in _SUBDIR_DOC_DIRS:
+        directory = base / relative
+        if directory.is_dir() and directory.resolve().is_relative_to(base):
+            paths.extend(directory.glob("*.md"))
+    resolved_files: list[Path] = []
+    for path in sorted(set(paths)):
+        if not path.is_file() or path.name.startswith(".env"):
+            continue
+        try:
+            if not path.resolve().is_relative_to(base):
+                continue
+        except OSError:
+            continue
+        resolved_files.append(path)
+    return resolved_files
+
+
+def watched_docs_signature(root: str | Path) -> tuple[tuple[str, int, int], ...] | None:
+    """Return lightweight stat signature of watched markdown docs for hot-reload checks."""
+    try:
+        base = Path(root).resolve(strict=True)
+    except OSError:
+        return None
+    if not base.is_dir():
+        return None
+    entries: list[tuple[str, int, int]] = []
+    for path in _candidate_doc_paths(base):
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        rel = path.relative_to(base).as_posix()
+        entries.append((rel, int(st.st_size), int(st.st_mtime_ns)))
+    entries.sort(key=lambda item: item[0])
+    return tuple(entries)
 
 
 def scan_project(root: str | Path, codex_paths: list[str | Path] | None = None, max_commits: int = 15) -> list[EvidenceEvent]:
@@ -20,14 +71,7 @@ def scan_project(root: str | Path, codex_paths: list[str | Path] | None = None, 
         raise NotADirectoryError(f"project path is not a directory: {base}")
     events: list[EvidenceEvent] = []
     now = datetime.now(timezone.utc)
-    paths = [base / name for name in ("README.md", "CONTEXT.md", "HANDOFF.md", "DECISIONS.md")]
-    for relative in ("docs", "docs/reviews", "docs/plans", "docs/adr"):
-        directory = base / relative
-        if directory.is_dir() and directory.resolve().is_relative_to(base):
-            paths.extend(directory.glob("*.md"))
-    for path in sorted(set(paths)):
-        if not path.is_file() or path.name.startswith(".env") or not path.resolve().is_relative_to(base):
-            continue
+    for path in _candidate_doc_paths(base):
         raw = path.read_bytes()
         content = raw.decode("utf-8", errors="replace")
         content_hash = hashlib.sha256(raw).hexdigest()

@@ -30,7 +30,7 @@ async function main() {
   vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   const pending=vm.runInContext('investigateProject({preventDefault(){}})',context);
-  assert.equal(intakeTimer.milliseconds,5000);
+  assert.equal(intakeTimer.milliseconds,3000);
   intakeTimer.callback();
   await new Promise(resolve=>setImmediate(resolve));
   assert.ok(element('investigation-answer').innerHTML.includes('已接入新消息'));

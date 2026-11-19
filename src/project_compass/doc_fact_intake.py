@@ -27,10 +27,28 @@ _DATE_PARA_RE = re.compile(
     r"^(20\d{2}-\d{2}-\d{2})\s+[^\n]+(?:\n(?!\s*\n|20\d{2}-\d{2}-\d{2}\s)[^\n]+)*",
     re.MULTILINE,
 )
+_HEADING_DECISION_RE = re.compile(
+    r"^#{1,4}\s+(20\d{2}-\d{2}-\d{2}[:：]?\s+[^\n]+)$",
+    re.MULTILINE,
+)
 _SENTENCE_END_RE = re.compile(r"(?:。|[a-zA-Z0-9\)\]\"'”）]\.(?=\s|$))")
 _CHECKBOX_RE = re.compile(r"^[ \t]*[-*]\s+\[([ xX])\]\s+(.+)$", re.MULTILINE)
 _NUMBERED_STAGE_RE = re.compile(r"^[ \t]*\d+\.\s+(\*\*[^\n]{8,})$", re.MULTILINE)
 _EXT_BEFORE_DOT_RE = re.compile(r"(?:md|py|js|cjs|mjs|json|html|css|yml|yaml|txt|ts)\.$", re.I)
+_COMPLETED_MILESTONE_TOKENS = (
+    "已完成",
+    "完成",
+    "闭环",
+    "收口",
+    "止血",
+    "交付",
+    "定型",
+    "封板",
+    "封存",
+    "就绪",
+    "跑通",
+    "已验收",
+)
 
 
 def _is_safe_quote(quote: str) -> bool:
@@ -88,14 +106,44 @@ def _slice_decision_sentence(para: str) -> str:
     return first_line[:_MAX_DOC_QUOTE_CHARS].strip()
 
 
+def _extract_agents_goal(content: str) -> str | None:
+    goal = _extract_readme_goal(content)
+    if goal:
+        return goal
+    in_fence = False
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or not line or line.startswith(("#", "---", "===", "<!--")):
+            continue
+        candidate = ""
+        if line.startswith(">"):
+            candidate = line.lstrip(">").strip()
+        elif re.match(r"^(?:[-*]|\d+\.)\s+", line):
+            candidate = re.sub(r"^(?:[-*]|\d+\.)\s+", "", line, count=1).strip()
+        if candidate and candidate in content and (15 <= len(candidate) <= 240) and _is_safe_quote(candidate):
+            return candidate
+    return None
+
+
 def _extract_decisions(content: str) -> list[str]:
-    quotes: list[str] = []
+    matches: list[tuple[int, str]] = []
+    seen_quotes: set[str] = set()
     for match in _DATE_PARA_RE.finditer(content):
         para = match.group(0).strip()
         quote = _slice_decision_sentence(para)
-        if _is_safe_quote(quote):
-            quotes.append(quote)
-    return quotes[-_MAX_DECISIONS:]
+        if _is_safe_quote(quote) and quote not in seen_quotes:
+            seen_quotes.add(quote)
+            matches.append((match.start(), quote))
+    for match in _HEADING_DECISION_RE.finditer(content):
+        quote = match.group(1).strip()
+        if _is_safe_quote(quote) and quote not in seen_quotes:
+            seen_quotes.add(quote)
+            matches.append((match.start(), quote))
+    matches.sort(key=lambda item: item[0])
+    return [quote for _, quote in matches[-_MAX_DECISIONS:]]
 
 
 def _extract_tasks(content: str, name_upper: str) -> list[tuple[str, str]]:
@@ -107,11 +155,14 @@ def _extract_tasks(content: str, name_upper: str) -> list[tuple[str, str]]:
             tasks.append((quote, "reported_complete" if checked else "pending"))
     if not tasks and name_upper == "HANDOFF.MD":
         for match in _NUMBERED_STAGE_RE.finditer(content):
-            quote = match.group(1).strip()
-            if quote.endswith(("：", ":")) or not _is_safe_quote(quote):
+            quote = match.group(1).strip().rstrip("：:").strip()
+            if not quote or not _is_safe_quote(quote):
                 continue
-            done_hint = any(tok in quote for tok in ("已完成", "闭环", "收口", "止血", "交付"))
+            neg_hint = any(tok in quote for tok in ("未完成", "待完成", "尚未完成"))
+            done_hint = (not neg_hint) and any(tok in quote for tok in _COMPLETED_MILESTONE_TOKENS)
             tasks.append((quote, "reported_complete" if done_hint else "pending"))
+        if tasks:
+            return list(reversed(tasks[-_MAX_TASKS:]))
     return tasks
 
 
@@ -124,18 +175,20 @@ def _doc_priority(event: EvidenceEvent) -> tuple[int, str, str]:
         rank = 1
     elif upper == "PRODUCT_SPEC.MD":
         rank = 2
-    elif upper == "DECISIONS.MD":
+    elif upper == "AGENTS.MD":
         rank = 3
-    elif upper == "PROGRESS.MD":
+    elif upper == "DECISIONS.MD":
         rank = 4
-    elif upper == "HANDOFF.MD":
+    elif upper == "PROGRESS.MD":
         rank = 5
-    elif "PLAN" in upper:
+    elif upper == "HANDOFF.MD":
         rank = 6
-    elif upper == "ROADMAP.MD":
+    elif "PLAN" in upper:
         rank = 7
-    else:
+    elif upper == "ROADMAP.MD":
         rank = 8
+    else:
+        rank = 9
     return (rank, rel.casefold(), event.id)
 
 
@@ -202,6 +255,10 @@ def scan_document_candidates(
             goal_quote = _extract_readme_goal(source.content)
             if goal_quote:
                 _add_candidate(source, "goal", "doc.goal", goal_quote, "unknown")
+        elif name_upper == "AGENTS.MD" and counts["goal"] == 0:
+            goal_quote = _extract_agents_goal(source.content)
+            if goal_quote:
+                _add_candidate(source, "goal", "doc.goal", goal_quote, "unknown")
 
         if name_upper == "DECISIONS.MD" and counts["decision"] < limits["decision"]:
             for dec_quote in _extract_decisions(source.content):
@@ -241,7 +298,7 @@ def scan_document_candidates(
 def record_document_candidates(events: list[EvidenceEvent], workspace=None) -> dict[str, Any]:
     """Persist deterministic document candidate proposals before acknowledging progress cursors."""
     progress = (
-        ExtractionProgress(workspace.state_path.parent / "doc-fact-rules", namespace=f"{RULE}:scan-v1")
+        ExtractionProgress(workspace.state_path.parent / "doc-fact-rules-v2", namespace=f"{RULE}:scan-v2")
         if workspace is not None
         else None
     )
