@@ -121,7 +121,7 @@ def _build_timeline_chapters(facts: list[dict], directions: dict) -> list[dict]:
         _chapter("01", "ch-goal", "目标确立", goals, "尚无目标候选 · 可运行 --extract-docs 或接入会话"),
         _chapter("02", "ch-decision", "方案选型与方向", decisions + dir_items, "尚无决策记录 · 待从讨论或文档中提取"),
         _chapter("03", "ch-task", "模块推进与待办", tasks, "尚无任务拆解 · 待从开发会话或文档中提取"),
-        _chapter("04", "ch-review", "共识审查与验证", reviewed, "尚无已裁决项 · 填写负责人后可确认或裁决候选"),
+        _chapter("04", "ch-review", "确认审查与验证", reviewed, "尚无已确认项 · 填写负责人后可确认或选择分支"),
     ]
 
 
@@ -506,14 +506,14 @@ def _build_handoff_brief(
             f"- **[Team Truth · {d['kind']}]** {d['clean_value']} `[{', '.join(d['evidence_ids'])}]`"
             for d in accepted_decisions[:6]
         )
-        or "- 暂无已确认团队决策（请在看板上点击 `✓ 采纳` 晋升候选事实）"
+        or "- 暂无已确认团队决定（请在看板上点击 `✓ 确认` 加入已确认事项）"
     )
     cand_lines = (
         "\n".join(
             f"- **[Candidate · {c['author']}]** {clean_display_text(c['value'])} `[{', '.join(c['evidence_ids'])}]`"
             for c in pending_candidates[:6]
         )
-        or "- 当前无待审候选"
+        or "- 当前无待确认想法"
     )
     todo_lines = (
         "\n".join(
@@ -530,8 +530,8 @@ def _build_handoff_brief(
     md = (
         f"# ✦ {project_name} · 1-Minute Handoff Brief (项目一分钟交接简报)\n\n"
         f"## 1. 核心焦点 (Session Summary & Focus)\n{goal_line}\n{next_line}\n\n"
-        f"## 2. 已确认团队共识 (Confirmed Team Truth)\n{dec_lines}\n\n"
-        f"## 3. 待确认会话候选 (Pending Candidates)\n{cand_lines}\n\n"
+        f"## 2. 已确认事项 (Confirmed Truth)\n{dec_lines}\n\n"
+        f"## 3. 待确认想法 (Pending Candidates)\n{cand_lines}\n\n"
         f"## 4. 下一步行动与待办 (Next Steps & Action Items)\n{todo_lines}\n\n"
         f"## 5. 关联代码结构 (Linked Code Modules)\n{code_lines}\n"
     )
@@ -583,10 +583,18 @@ def build_dashboard_state(
 ) -> dict:
     """Build the read-only state consumed by the personal/team dashboard."""
     facts = derive_facts(events)
+    latest_review_by_fact: dict[str, dict] = {}
+    for review in [*fact_reviews, *review_history]:
+        if review.get("fact_id") and review.get("action") != "confirm_relation":
+            latest_review_by_fact[str(review["fact_id"])] = review
+    rejected_fact_ids = {
+        fid for fid, rev in latest_review_by_fact.items() if rev.get("action") == "reject_fact"
+    }
     accepted_by_subject: dict[str, str] = {}
     for item in fact_reviews:
-        if item.get("action") == "accept_fact" and item.get("fact_id"):
-            accepted_by_subject[str(item.get("subject_key", item["fact_id"]))] = item["fact_id"]
+        fid = item.get("fact_id")
+        if item.get("action") == "accept_fact" and fid and str(fid) not in rejected_fact_ids:
+            accepted_by_subject[str(item.get("subject_key", fid))] = str(fid)
     accepted_fact_ids = list(accepted_by_subject.values())
     views = build_views(events, accepted_fact_ids=accepted_fact_ids, session_members=session_members, fact_reviews=fact_reviews)
     events_by_id = {ev.id: ev for ev in events}
@@ -597,13 +605,6 @@ def build_dashboard_state(
     index = build_evidence_index(events, facts).with_candidate_relations(build_requested_evidence_relations(events, facts, review_history)).with_confirmed_relations(confirmed_relations)
     team_facts = views["team"]["facts"]
     accepted_subjects = {fact["subject_key"] for fact in team_facts if fact["status"] == "accepted"}
-    latest_review_by_fact: dict[str, dict] = {}
-    for review in [*fact_reviews, *review_history]:
-        if review.get("fact_id") and review.get("action") != "confirm_relation":
-            latest_review_by_fact[str(review["fact_id"])] = review
-    rejected_fact_ids = {
-        fid for fid, rev in latest_review_by_fact.items() if rev.get("action") == "reject_fact"
-    }
     completed_fact_ids = {
         str(review["fact_id"])
         for review in [*fact_reviews, *review_history]
@@ -670,7 +671,7 @@ def build_dashboard_state(
             "status": "needs_evidence" if latest_review_by_fact.get(fact["id"], {}).get("action") == "request_evidence" else fact["status"], "author": fact.get("author"),
             "evidence_count": len(fact.get("evidence_ids") or []),
             "candidate_relation_count": candidate_by_fact.get(fact["id"], 0),
-            "reason": "负责人要求补充证据" if latest_review_by_fact.get(fact["id"], {}).get("action") == "request_evidence" else ("冲突双方待负责人裁决" if fact["status"] == "conflicted" else "候选事实待负责人确认"),
+            "reason": "负责人要求补充证据" if latest_review_by_fact.get(fact["id"], {}).get("action") == "request_evidence" else ("存在分歧的两种说法待负责人确认" if fact["status"] == "conflicted" else "待确认想法待负责人确认"),
         }
         for fact in team_facts
         if fact["status"] in {"proposed", "conflicted"}

@@ -158,7 +158,7 @@ async function main() {
   await h.flush();
 
   assert.ok(h.element("hero-copy").textContent.includes("新项目已就绪"), "Empty 0->1 welcome copy missing");
-  assert.equal(h.element("goal-title").textContent, "核心目标待确定");
+  assert.equal(h.element("goal-title").textContent, "暂未设定核心目标");
   assert.equal(h.intervals[0].ms, 3000, "Live polling interval must be 3000ms");
 
   // Switch to mindmap & simulate user typing a quick note AND having drawer open
@@ -226,7 +226,7 @@ async function main() {
   assert.equal(h.element("quick-note-input").value, "正在输入中的想法不被轮询清空", "Polling clobbered user input!");
   assert.equal(h.element("evidence-drawer").hidden, false, "Polling closed active drawer!");
   assert.equal(h.element("goal-title").textContent, "零配置实时记忆工作台", "Personal view did not inherit fallback_goal");
-  assert.ok(h.element("hero-copy").textContent.includes("1 项已定案 · 1 项待拍板"), `Unexpected hero copy: ${h.element("hero-copy").textContent}`);
+  assert.ok(h.element("hero-copy").textContent.includes("1 项已确认 · 1 项待确认"), `Unexpected hero copy: ${h.element("hero-copy").textContent}`);
 
   const decHTML = h.element("personal-decision-list").innerHTML;
   assert.ok(decHTML.includes("依据 · 1"), "Ev pill did not render human 依据 · 1 badge");

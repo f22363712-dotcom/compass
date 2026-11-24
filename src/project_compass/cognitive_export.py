@@ -83,11 +83,11 @@ def export_github_issue(state: dict[str, Any]) -> str:
             lines.append("_当前暂无已提取的结构化待办任务。_")
     lines.append("")
 
-    lines.append("## ⚠️ 待审候选事实与待核对前提 (Pending Candidates)")
+    lines.append("## ⚠️ 待确认事项与未验证前提 (Pending Items)")
     pending = brief.get("pending_candidates") or []
     if pending:
         for p in pending:
-            lines.append(f"- [ ] **待核对**：{_clean_text(p)}")
+            lines.append(f"- [ ] **待确认**：{_clean_text(p)}")
     else:
         lines.append("_所有当前事实均已获得负责人确认。_")
     lines.append("")
@@ -126,8 +126,8 @@ def export_pull_request(state: dict[str, Any]) -> str:
 
     lines.append("### 🔍 跨生态在场与评审状态 (Presence & Reviews)")
     team_presence = presence.get("team", {})
-    lines.append(f"- **团队确认事实数**：{team_presence.get('accepted_count', 0)} 项")
-    lines.append(f"- **待核对候选数**：{team_presence.get('pending_count', 0)} 项")
+    lines.append(f"- **已确认事项数**：{team_presence.get('accepted_count', 0)} 项")
+    lines.append(f"- **待确认事项数**：{team_presence.get('pending_count', 0)} 项")
     members = presence.get("members", [])
     valid_members = [m.get("member_id") or m.get("id") for m in members if m.get("member_id") or m.get("id")]
     if valid_members:
@@ -178,7 +178,7 @@ def export_prd(state: dict[str, Any]) -> str:
     assumptions = [f for f in (team.get("facts") or []) if f.get("kind") == "assumption"]
     if conflicts:
         conflict_keys = ", ".join(f"`{c.get('subject_key')}`" for c in conflicts[:4] if c.get("subject_key"))
-        problem_summary = f"当前存在 {len(conflicts)} 组待裁决技术分歧（涉及 {conflict_keys or '未命名主题'}），需结合原始证据对比并显式确认共识。"
+        problem_summary = f"当前存在 {len(conflicts)} 组待确认技术分歧（涉及 {conflict_keys or '未命名主题'}），需结合原始证据对比并显式确认共识。"
     elif assumptions:
         problem_summary = f"当前仍存在 {len(assumptions)} 项未验证前提（例如：{_clean_text(assumptions[0].get('value'))}），需补充执行证据核实。"
     else:
@@ -232,11 +232,11 @@ def export_prd(state: dict[str, Any]) -> str:
         lines.append("_暂无结构化决策树。_")
     lines.append("")
 
-    lines.append("## 4. 功能规范与已确认团队共识 (Confirmed Scope)")
+    lines.append("## 4. 功能规范与已确认事项 (Confirmed Scope)")
     accepted = brief.get("accepted_decisions") or []
     if accepted:
         for acc in accepted:
-            lines.append(f"- **[RFC/规范已采纳]**：{_clean_text(acc)}")
+            lines.append(f"- **[已确认规范]**：{_clean_text(acc)}")
     else:
         pending_decisions = [f for f in (team.get("facts") or []) if f.get("kind") == "decision" and f.get("status") in {"proposed", "conflicted"}]
         if pending_decisions:
@@ -284,7 +284,7 @@ def export_mindmap(state: dict[str, Any]) -> str:
             cleaned = cleaned[: max_len - 1] + "…"
         return cleaned or "未命名节点"
 
-    root_label = _mm_safe(root.get("label") or project.get("name") or "核心目标待定锚", 32)
+    root_label = _mm_safe(root.get("label") or project.get("name") or "暂未设定核心目标", 32)
     mermaid_lines: list[str] = [
         "```mermaid",
         "mindmap",
@@ -296,7 +296,7 @@ def export_mindmap(state: dict[str, Any]) -> str:
         for branch in branches:
             b_state = branch.get("state")
             b_status = branch.get("status")
-            prefix = "已舍弃" if b_state == "abandoned" else "已暂缓" if b_state == "deferred" else "已定案" if b_status == "accepted" else "待拍板"
+            prefix = "已放弃" if b_state == "abandoned" else "已暂缓" if b_state == "deferred" else "已确认" if b_status == "accepted" else "待确认"
             b_label = _mm_safe(branch.get("label"), 26)
             mermaid_lines.append(f"    {prefix}：{b_label}")
             ev_str = ", ".join(branch.get("evidence_ids") or [])

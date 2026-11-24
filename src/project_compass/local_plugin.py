@@ -1049,7 +1049,7 @@ class WorkspaceMCPAdapter:
                 }
                 self.dispatch("note.record", note_payload)
                 payload = self.dispatch("workbench.open", {"project_id": project_id, "_skip_bootstrap": True})
-                payload["status_note"] = "已记入待确认想法，并同步更新脑图"
+                payload["status_note"] = "已记入待确认想法，并同步更新思维导图"
                 return payload
             if action == "dispatch_priority":
                 fact_id = str(params.get("fact_id") or "").strip()

@@ -36,7 +36,7 @@ TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
     "product_delivery": {
         "key": "product_delivery",
         "label": "通用产品交付组",
-        "description": "项目负责人把控目标与定案裁决；产品方案、研发实现与测试验收三席并行提交依据与提案。",
+        "description": "项目负责人把控目标与确认；产品方案、研发实现与测试验收三席并行提交依据与提案。",
         "mode": "team",
         "owner_id": "lead",
         "owner_label": "项目负责人",
@@ -70,7 +70,7 @@ TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
     "fullstack_engineering": {
         "key": "fullstack_engineering",
         "label": "全栈软件研发组",
-        "description": "技术负责人拍板主线基准；前端、后端与测试审查席按独立令牌并行汇报证据与提案。",
+        "description": "技术负责人确认主线事项；前端、后端与测试审查席按独立令牌并行汇报证据与提案。",
         "mode": "team",
         "owner_id": "owner",
         "owner_label": "技术负责人",
@@ -104,7 +104,7 @@ TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
     "research_lab": {
         "key": "research_lab",
         "label": "科研 / 方案攻坚组",
-        "description": "主笔负责人裁决实验结论；调研与复现席位各自沉淀多源证据与消融对照结果。",
+        "description": "主笔负责人确认实验结论；调研与复现席位各自沉淀多源证据与消融对照结果。",
         "mode": "team",
         "owner_id": "lead",
         "owner_label": "主笔负责人",

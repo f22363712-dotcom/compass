@@ -371,19 +371,14 @@ function runBridgeScenario({ withSidecar }) {
   assert.ok(partialBody.includes('data-dispatch-fact-target="send"'));
   assert.equal(partialBody.includes('data-dispatch-fact-target="new"'), false);
 
-  // 5. Solo signer flow preserves #review-note text across inline prompt
+  // 5. Solo auto-signer resolves cleanly & preserves #review-note text
   raceNode("reviewer-input").value = "";
   raceNode("review-note").value = "保留的关键验收备注";
   await raceCtxObj.acceptFact("fact-note", "accept_fact", { fromDrawer: true });
-  assert.ok(vm.runInContext("state.pendingSignerAction", raceVm));
-  assert.equal(vm.runInContext("state.pendingSignerAction.note", raceVm), "保留的关键验收备注");
-  raceNode("solo-signer-input-field").value = "fang";
-  const soloBtn = raceElements.get("__soloSubmitBtn");
-  assert.ok(soloBtn && typeof soloBtn.onclick === "function");
-  await soloBtn.onclick();
   const reviewPost = raceFetchLog.find((c) => c.url === "/api/review");
-  assert.ok(reviewPost, "Solo signer submit should resume POST /api/review");
+  assert.ok(reviewPost, "Solo auto-signer should submit POST /api/review directly");
   assert.equal(JSON.parse(reviewPost.body).note, "保留的关键验收备注");
+  assert.ok(JSON.parse(reviewPost.body).reviewer.length > 0, "Solo auto-signer should populate non-empty reviewer");
 
   // 6. Redundant same-project file:/// URI normalization skips duplicate /api/projects/activate
   const sameProjFetchCalls = [];

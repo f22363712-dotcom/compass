@@ -205,7 +205,7 @@ class V12GuardrailsAndUXTests(unittest.TestCase):
             self.assertEqual(len(compact["pending_proposals"]), 2)
             self.assertEqual(len(compact["open_pitfalls"]), 1)
             self.assertEqual(len(compact["nudge_lines"]), 2)
-            self.assertIn("暂无已定案基准", compact["nudge_lines"][0])
+            self.assertIn("暂无已确认事项", compact["nudge_lines"][0])
 
     def test_record_note_and_verify_completion_mcp_and_http_parity_and_degradation(self):
         with tempfile.TemporaryDirectory() as tmp:

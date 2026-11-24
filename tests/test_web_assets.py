@@ -62,7 +62,7 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn("/api/evidence?id=", script)
         self.assertIn("/api/review", script)
         self.assertIn("确认支持关系", script)
-        self.assertIn("确认为团队事实", script)
+        self.assertIn("✓ 确认", script)
         self.assertIn("review_history", script)
         self.assertIn("/api/investigate", script)
         self.assertIn("当前状态下复用的调查结果", script)

@@ -267,16 +267,16 @@ async function main() {
   assert.ok(!presenceHtml.includes("<script>alert(1)</script>"), "Unescaped script tag in role_label!");
   assert.ok(presenceHtml.includes("developer") && presenceHtml.includes("研发实现席"), "Unposted team seat missing from presence bar");
 
-  // 2. Decision card and todo card render "✓ 确认并交给 AI" button
+  // 2. Decision card and todo card render "✓ 确认并发给 AI" button
   const decHtml = element("personal-decision-list").innerHTML;
   const todoHtml = element("personal-todo-list").innerHTML;
-  assert.ok(decHtml.includes('data-dispatch-fact="fact-dec-1"') && decHtml.includes("✓ 确认并交给 AI"));
-  assert.ok(todoHtml.includes('data-dispatch-fact="fact-task-1"') && todoHtml.includes("✓ 确认并交给 AI"));
+  assert.ok(decHtml.includes('data-dispatch-fact="fact-dec-1"') && decHtml.includes("✓ 确认并发给 AI"));
+  assert.ok(todoHtml.includes('data-dispatch-fact="fact-task-1"') && todoHtml.includes("发给 AI"));
 
-  // 3. Opening fact drawer renders "✓ 确认并交给 AI" button cleanly
+  // 3. Opening fact drawer renders "✓ 确认并发给 AI" button cleanly
   await vm.runInContext('openFact("fact-dec-1")', context);
   const drawerHtml = element("drawer-body").innerHTML;
-  assert.ok(drawerHtml.includes('data-dispatch-fact="fact-dec-1"') && drawerHtml.includes("✓ 确认并交给 AI"));
+  assert.ok(drawerHtml.includes('data-dispatch-fact="fact-dec-1"') && drawerHtml.includes("✓ 确认并发给 AI"));
 
   // 4. Triggering dispatchFact on unaccepted decision calls /api/review + /api/dispatch + clipboard + toast
   await vm.runInContext('dispatchFact("fact-dec-1", { fromDrawer: true })', context);
@@ -290,9 +290,9 @@ async function main() {
   assert.equal(mutatingCalls[1].body.fact_id, "fact-dec-1");
   assert.equal(mutatingCalls[1].body.reviewer, "lead");
   assert.equal(copiedPayloads.length, 1);
-  assert.ok(copiedPayloads[0].includes("【Compass 已定案推进】") && copiedPayloads[0].includes("ev-1"));
+  assert.ok(copiedPayloads[0].includes("【Compass 已确认推进】") && copiedPayloads[0].includes("ev-1"));
   assert.equal(element("compass-toast").hidden, false);
-  assert.equal(element("compass-toast").textContent, "已确认并加入优先执行列表（指令已复制）");
+  assert.equal(element("compass-toast").textContent, "已确认并加入待优先处理（指令已复制）");
   assert.equal(element("priority-dispatch-surface").hidden, false);
   assert.ok(element("priority-dispatch-list").innerHTML.includes("锁定纯本地台账基准"));
 

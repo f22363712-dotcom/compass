@@ -243,6 +243,21 @@ class V15MCPAppAndRolesTests(unittest.TestCase):
                   const hasNextComplete = initialMindmap.includes('data-complete-id="fact-next-1"');
                   listeners.click({{ target: {{ closest: (s) => (s === "[data-tab]" ? {{ getAttribute: () => "triage" }} : null) }} }});
                   const triageHtml = appEl.innerHTML;
+                  const callsBeforeUx = posted.filter((x) => x && x.method === "tools/call").length;
+                  // 1. Batch ignore 1st click only arms 2-step confirm without committing
+                  listeners.click({{ target: {{ closest: (s) => (s === "[data-batch-ignore-ids]" ? {{ getAttribute: () => "fact-stale-1" }} : null) }} }});
+                  const batchArmedHtml = appEl.innerHTML;
+                  const batchFirstClickCalls = posted.filter((x) => x && x.method === "tools/call").length - callsBeforeUx;
+                  // 2. Single ignore hides item immediately without sending reject_fact within 5s, renders floating feedback-bar undo
+                  listeners.click({{ target: {{ closest: (s) => (s === "[data-reject-id]" ? {{ getAttribute: () => "fact-stale-1" }} : null) }} }});
+                  const ignoredHtml = appEl.innerHTML;
+                  const ignoreCallsImmediate = posted.filter((x) => x && x.method === "tools/call").length - callsBeforeUx;
+                  const undoMatch = ignoredHtml.match(/data-undo-token="([^"]+)"/);
+                  if (undoMatch) {{
+                    listeners.click({{ target: {{ closest: (s) => (s === "[data-undo-token]" ? {{ getAttribute: () => undoMatch[1] }} : null) }} }});
+                  }}
+                  const restoredHtml = appEl.innerHTML;
+                  const ignoreCallsAfterUndo = posted.filter((x) => x && x.method === "tools/call").length - callsBeforeUx;
                   listeners.click({{ target: {{ closest: (s) => (s === "[data-tab]" ? {{ getAttribute: () => "team" }} : null) }} }});
                   listeners.input({{ target: {{ id: "custom-seat-input", value: "安全:审计席" }} }});
                   const soloCmd = setupCodeEl.textContent;
@@ -260,8 +275,16 @@ class V15MCPAppAndRolesTests(unittest.TestCase):
                     hasNextComplete,
                     hasStaleDrawer: triageHtml.includes('class="stale-drawer"') && triageHtml.includes("一键全部忽略"),
                     hasDialogueWithdraw: triageHtml.includes("对话已定") && triageHtml.includes('data-withdraw-id="fact-dlg-1"'),
+                    hasAcceptedWithdraw: triageHtml.includes('data-withdraw-id="fact-done-1"'),
                     hasAcceptedDoneBadge: triageHtml.includes("✓ 已完成"),
                     mappedSystemSession: triageHtml.includes("历史会话"),
+                    batchArmedText: batchArmedHtml.includes("再点一次，忽略这 1 条"),
+                    batchFirstClickCalls,
+                    hasFixedFeedbackClass: html.includes(".feedback-bar {{") && html.includes("position: fixed;") && ignoredHtml.includes('class="feedback-bar '),
+                    hiddenBeforeUndo: !ignoredHtml.includes("三天前的旧想法"),
+                    ignoreCallsImmediate,
+                    restoredAfterUndo: restoredHtml.includes("三天前的旧想法"),
+                    ignoreCallsAfterUndo,
                     soloCmd,
                     copiedSolo,
                     teamCmd,
@@ -280,19 +303,28 @@ class V15MCPAppAndRolesTests(unittest.TestCase):
                 self.assertTrue(parsed_cmds["hasNextComplete"])
                 self.assertTrue(parsed_cmds["hasStaleDrawer"])
                 self.assertTrue(parsed_cmds["hasDialogueWithdraw"])
+                self.assertTrue(parsed_cmds["hasAcceptedWithdraw"])
                 self.assertTrue(parsed_cmds["hasAcceptedDoneBadge"])
                 self.assertTrue(parsed_cmds["mappedSystemSession"])
-                # Also verify message-only host capabilities (hasMessage=true, hasContext=false) route split-main to message_current
-                msg_only_probe = probe_js.replace(
-                    "hostCapabilities: {},",
-                    "hostCapabilities: { message: {} },",
-                ).replace(
-                    'mappedSystemSession: triageHtml.includes("历史会话"),',
-                    'mappedSystemSession: triageHtml.includes("历史会话"), hasMsgCurrentSplit: triageHtml.includes(\'class="btn btn-primary split-main" data-dispatch-id="fact-stale-1" data-dispatch-mode="message_current"\'),',
-                )
-                msg_res = subprocess.run([node, "-e", msg_only_probe], capture_output=True, text=True, encoding="utf-8", timeout=15)
-                self.assertEqual(msg_res.returncode, 0, msg_res.stderr)
-                self.assertTrue(json.loads(msg_res.stdout.strip().splitlines()[-1])["hasMsgCurrentSplit"])
+                self.assertTrue(parsed_cmds["batchArmedText"])
+                self.assertEqual(parsed_cmds["batchFirstClickCalls"], 0)
+                self.assertTrue(parsed_cmds["hasFixedFeedbackClass"])
+                self.assertTrue(parsed_cmds["hiddenBeforeUndo"])
+                self.assertEqual(parsed_cmds["ignoreCallsImmediate"], 0)
+                self.assertTrue(parsed_cmds["restoredAfterUndo"])
+                self.assertEqual(parsed_cmds["ignoreCallsAfterUndo"], 0)
+                # Verify message-only & both-capabilities host routes split-main to message_current
+                for caps_literal in ("hostCapabilities: { message: {} },", "hostCapabilities: { message: {}, updateModelContext: {} },"):
+                    msg_only_probe = probe_js.replace(
+                        "hostCapabilities: {},",
+                        caps_literal,
+                    ).replace(
+                        'mappedSystemSession: triageHtml.includes("历史会话"),',
+                        'mappedSystemSession: triageHtml.includes("历史会话"), hasMsgCurrentSplit: triageHtml.includes(\'class="btn btn-primary split-main" data-dispatch-id="fact-stale-1" data-dispatch-mode="message_current"\'),',
+                    )
+                    msg_res = subprocess.run([node, "-e", msg_only_probe], capture_output=True, text=True, encoding="utf-8", timeout=15)
+                    self.assertEqual(msg_res.returncode, 0, msg_res.stderr)
+                    self.assertTrue(json.loads(msg_res.stdout.strip().splitlines()[-1])["hasMsgCurrentSplit"])
                 self.assertEqual(parsed_cmds["soloCmd"], parsed_cmds["copiedSolo"])
                 for label, cmd_str, expected_seats in (
                     ("soloCmd", parsed_cmds["soloCmd"], 1),

@@ -200,7 +200,7 @@ async function main() {
   };
   vm.runInContext("renderInvestigation(ansFixture)", context);
   const invHtml = element("investigation-answer").innerHTML;
-  assert.ok(invHtml.includes("语义归纳") && invHtml.includes("已采纳正交脑图作为右侧主视图"));
+  assert.ok(invHtml.includes("智能摘要") && invHtml.includes("已采纳正交脑图作为右侧主视图"));
   assert.ok(!invHtml.includes("**完成发布**"));
 
   console.log("v1.3 dual anchors, Agent hints, inline next_step save, search_excerpt & semantic summary verified.");

@@ -84,8 +84,8 @@ def _run_sidecar_critic(
         {
             "role": "system",
             "content": (
-                "你是独立的软件验收旁路督导员。只依据已定案基准、待定项、遗留坑位和本次改动总结，"
-                "判断是否存在偏离目标、把未拍板备选当需求实现、或疑似未验证的问题。"
+                "你是独立的软件验收旁路督导员。只依据已确认事项、待确认项、遗留坑位和本次改动总结，"
+                "判断是否存在偏离目标、把未确认备选当需求实现、或疑似未验证的问题。"
                 '严格返回 JSON：{"verdict":"pass|warn|fail","findings":["..."]}，最多 3 条简短中文。'
             ),
         },
@@ -267,13 +267,13 @@ def evaluate_completion_gate(
     if pending_proposals:
         warnings.append({
             "code": "unconfirmed_proposals_present",
-            "message": f"当前有 {len(pending_proposals)} 项待确认方案尚未经用户确认，请提醒用户审阅而非默认定案。",
+            "message": f"当前有 {len(pending_proposals)} 项待确认方案尚未经用户确认，请提醒用户审阅而非默认已确认。",
         })
 
     if conflicts:
         warnings.append({
             "code": "unresolved_conflicts",
-            "message": f"存在 {len(conflicts)} 组前后分歧尚未裁决，请引导用户在看板对照拍板。",
+            "message": f"存在 {len(conflicts)} 组前后分歧尚未选定，请引导用户在看板分歧对照中确认。",
         })
 
     sidecar = _run_sidecar_critic(

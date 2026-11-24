@@ -18,7 +18,7 @@ def sample_events() -> list[EvidenceEvent]:
                 "source_ref": "docs/sample-session-a.md",
                 "facts": [
                     {"kind": "goal", "subject_key": "project.goal", "value": "交付证据看板黄金路径"},
-                    {"kind": "decision", "subject_key": "arch.storage", "value": "采用本地追加式 JSON 状态存储与显式负责人裁决机制"},
+                    {"kind": "decision", "subject_key": "arch.storage", "value": "采用本地追加式 JSON 状态存储与显式负责人确认机制"},
                     {"kind": "task", "subject_key": "task.golden-path", "value": "完成本地看板数据接通与端到端联调", "status": "active"},
                 ],
             },

@@ -201,7 +201,7 @@ async function main() {
   assert.ok(!todoHtml.includes("任务状态：pending"), "Raw English task_state 'pending' leaked into todo card");
   assert.ok(todoHtml.includes("进度：待推进"), "Plain-language Chinese todo progress missing");
   assert.ok(todoHtml.includes("superseded-todos-fold") && todoHtml.includes("历史已接替记录（1 条 · 默认折叠）"));
-  assert.ok(todoHtml.includes("已由新定案接替") && !todoHtml.includes('data-target-id="old-next"'));
+  assert.ok(todoHtml.includes("已有新版本接替") && !todoHtml.includes('data-target-id="old-next"'));
 
   // 2. True conflict decision card displays explicit conflict point digest naming opposing claim
   const decHtml = element("personal-decision-list").innerHTML;
@@ -211,12 +211,12 @@ async function main() {
   await vm.runInContext('showCitationPopover(document.getElementById("anchor-pop"), "note-old")', context);
   const popHtml = element("citation-popover").innerHTML;
   assert.ok(!popHtml.includes("web://quick-note") && !popHtml.includes("user_message"), "Raw URL/kind leaked in citation popover");
-  assert.ok(popHtml.includes("网页随手记") && popHtml.includes("随手记") && popHtml.includes("已有新定案接替"));
+  assert.ok(popHtml.includes("网页随手记") && popHtml.includes("随手记") && popHtml.includes("已有新版本接替"));
 
   // 4. Opening old superseded evidence opens drawer with clear Old-vs-New comparison AND folds technical metadata
   await vm.runInContext('openEvidence("note-old")', context);
   const oldDrawer = element("drawer-body").innerHTML;
-  assert.ok(oldDrawer.includes("新旧计划接替说明") && oldDrawer.includes("审阅漫剧演示剧本并发布 v1.4.0"));
+  assert.ok(oldDrawer.includes("新旧版本接替说明") && oldDrawer.includes("审阅漫剧演示剧本并发布 v1.4.0"));
   assert.ok(!oldDrawer.includes("web://quick-note · fang"), "Raw URL/author line should be replaced by human Chinese");
   assert.ok(oldDrawer.includes("raw-meta-fold") && oldDrawer.includes("底层技术字段（排障核对用 · 默认折叠）"));
   assert.ok(!oldDrawer.includes('raw-meta-fold" open'));
@@ -224,8 +224,8 @@ async function main() {
   // 5. Opening true conflict evidence surfaces side-by-side Claim A vs Claim B right at top of drawer
   await vm.runInContext('openEvidence("ev-dbb")', context);
   const conflictDrawer = element("drawer-body").innerHTML;
-  assert.ok(conflictDrawer.includes("分歧双方对照（为什么标为存在分歧？）"));
-  assert.ok(conflictDrawer.includes("主张 A（当前查看）") && conflictDrawer.includes("主张 B（另一方记录）"));
+  assert.ok(conflictDrawer.includes("分歧对照（为什么标为存在分歧？）"));
+  assert.ok(conflictDrawer.includes("方案 A（当前查看）") && conflictDrawer.includes("方案 B（另一方记录）"));
   assert.ok(conflictDrawer.includes("改用远程云端数据库存储") && conflictDrawer.includes("使用纯本地 JSON 文件账本"));
 
   console.log("Plain-language UI, supersede folding, true conflict drawer comparison & metadata collapse verified.");

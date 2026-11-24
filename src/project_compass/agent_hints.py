@@ -40,8 +40,8 @@ _ALLOWED_HINT_CATEGORIES = frozenset({
     "推进建议",
     "偏航提醒",
     "风险提示",
-    "待定锚点",
-    "待拍板",
+    "还没定目标",
+    "待确认",
     "未验前提",
     "方案权衡",
     "盲区预警",
@@ -360,7 +360,7 @@ def build_local_agent_hints(state: dict[str, Any]) -> list[dict[str, Any]]:
     elif not has_explicit_next:
         _push({
             "id": "hint-anchor-next-empty",
-            "category": "待定锚点",
+            "category": "推进建议",
             "level": "info",
             "text": "核心目标已定，建议顺手补一句「当前下一步」，让大家清楚手头优先做什么。",
             "evidence_ids": list(next_consensus.get("evidence_ids") or [])[:2] if next_consensus else [],
@@ -450,7 +450,7 @@ def build_local_agent_hints(state: dict[str, Any]) -> list[dict[str, Any]]:
             first_short = first_item.get("short_title") or summarize_node_title(first_item.get("value") or "", max_chars=20)
             _push({
                 "id": f"hint-backlog-{len(recent_pending)}-{first_item.get('id', 'p')}",
-                "category": "待拍板",
+                "category": "待确认",
                 "level": "info",
                 "text": f"最近有 {len(recent_pending)} 项待确认想法（如「{first_short}」），挑重要的确认、不用的点忽略即可。",
                 "evidence_ids": list(first_item.get("evidence_ids") or [])[:2],

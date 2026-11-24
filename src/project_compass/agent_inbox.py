@@ -252,8 +252,8 @@ class AgentInbox:
             source_channel='mcp_record_note',
         )
         nudge_lines = [
-            f"已记入「待拍板」分支：{note_meta['short_title']}（尚未定案，用户点击定案前不可当作正式需求）。",
-            f"已附短标题并落账至工作区 [{note_meta['source_id']}]，看板可实时生长呈现。",
+            f"已记入「待确认」分支：{note_meta['short_title']}（尚未确认，用户点击确认前不可当作正式需求）。",
+            f"已附短标题并落账至工作区 [{note_meta['source_id']}]，看板可实时呈现。",
         ]
         return {'recorded': True, 'note': note_meta, 'nudge_lines': nudge_lines}
 

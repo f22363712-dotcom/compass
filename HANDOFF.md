@@ -1,8 +1,8 @@
 # Project Compass 长期收敛与 Swiss UI 重构交接台账 (HANDOFF.md)
 
-> **当前日期**：2026-11-21（`v1.4.0` 提交 `10e2fcc` 已推送远端；`v1.5.0` → `v1.6` → **`v1.6.1` 公开首发筹备 Stage A** 已落地并就绪）  
-> **当前分支**：`main`（当前远端 `f22363712-dotcom/compass`，筹备迁移至新 GitHub Org `get-compass` 以便与个人 Gmail 前缀账号脱敏隔离）  
-> **提交里程碑链**：`15f204a` (`v1.0.0`) -> v1.1 -> v1.2 -> v1.3 -> `10e2fcc` (`v1.4.0` 已推送) -> `v1.5.0` -> `v1.6` -> **`v1.6.1` Stage A（已就绪）**  
+> **当前日期**：2026-11-24（分支 `release/v1.7-ux-motion`：基线提交 `2cc621b` 已落盘，**v1.7.0 体验统一与动效升级** 待合入发布）  
+> **当前分支**：`release/v1.7-ux-motion`（基于 `main` `10e2fcc` 提交了 `2cc621b` 含 v1.5–v1.6.2 改动；已完成双轮审查与全部门禁验证，合入 `main` 并打 `v1.7.0` 标签）  
+> **提交里程碑链**：`15f204a` (`v1.0.0`) -> v1.1 -> v1.2 -> v1.3 -> `10e2fcc` (`v1.4.0` 已推送) -> `2cc621b` (v1.5–v1.6.2) -> **`v1.7.0`（待合并发布）**  
 > **技术栈契约**：Python >= 3.10 纯标准库（`pyproject.toml` 保持 `dependencies = []`） / 原生 Web（Classic JS + CSS，无打包器） / 本地 JSON 原子存储 + 可选 SQLite FTS5 `:memory:` 检索（带精简环境自动退避）  
 > **主控与验收文档**：
 > - 活跃文档唯一总入口：[`docs/INDEX.md`](docs/INDEX.md)
@@ -76,6 +76,9 @@
    - **治本解决截图 1（过期提示、待定噪音与黑话）**：新增 `complete_fact`（「✓ 标记已完成」按钮 + `select_next_consensus`/`dashboard.py` 过滤），修复 `AsyncHintCache._build_snapshot` 取最新 `[-4:]`、注入 `next_step_age_days`/`recent_completed`、跳过 `>48h` 旧计划误报偏航；过滤 `decision_graph.py` 一次性交互选项；待定待办折叠 `>72h` 旧项并支持批量忽略；安全降级 `✓ 定案最新项` 为 `查看待确认`；全面清除界面黑话；
    - **治本解决截图 2（跨项目直达与隐私守护）**：`verify_completion` 自动附带可点击看板直达链接（`sidecar://compass/compass_board/` / 本地守护地址 / `open_compass` 提示）；`mcp_setup.py --init-rules` 幂等写入 `.project-memory/` 到 `.gitignore` 并完善 `--doctor` ISO 时间戳与检测；打通 `mcp_server` `file://` 动态路由、`/api/state?project_id=<active>` 可写状态与 Sidecar 启动/切换容错；
    - **60 秒陌生人体验、统一 `1.6.1` 与传播手册**：新增 `compass --demo`（「个人播客笔记与剪藏小工具」纯本地示范 + `--no-browser` 控制）及轮子安装无 `examples/` 兜底；统一升级 `1.6.1`、`server.json` 2026 Schema、`smithery.yaml`、`mcp.json` 零配置与 `.github/ISSUE_TEMPLATE/`；重写通俗版 `README.md` 并输出 `docs/STAGE_A_EXECUTION_AND_LAUNCH_PLAYBOOK_2026-11-21.md`。
+15. **v1.7.0 · 用户体验统一与苹果级产品动效升级（`release/v1.7-ux-motion` · 进行中）**：
+   - **基线提交 `2cc621b`**：已把 v1.5–v1.6.2 共 79 个变动文件单独提交；已落盘可复用手册 [`docs/UX_MOTION_REVIEW_PLAYBOOK.md`](docs/UX_MOTION_REVIEW_PLAYBOOK.md)；
+   - **双轮执行**：第一轮先完成三处界面（内嵌面板、主看板、对话短提示）的 8 原则体验审查、大白话词表统一、5 秒可撤销操作与不打断局部交互，并实拍验收；第二轮叠加基于 View Transitions 与三档时长曲线的全局动效，跑通 `scripts/ux_gate.py`、300 条长列表帧率压测、Gemini + 零上下文 Claude 双盲审与全量门禁后合入 `main` 并打 `v1.7.0` 标签。
 
 ---
 

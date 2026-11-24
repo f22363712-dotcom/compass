@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Compass v1.6.1 · 和 AI 一起做项目，不怕聊着聊着忘了目标和决定</strong><br>
+  <strong>Compass v1.7.0 · 和 AI 一起做项目，不怕聊着聊着忘了目标和决定</strong><br>
   左边正常和 Coding Agent 对话写代码，右边实时长出「目标、当前下一步、待选方案对比和避坑记录」。<br>
   100% 纯本地运行（<code>dependencies = []</code>），对话与决策账本只保存在你自己电脑的 <code>.project-memory/</code>。
 </p>
@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache-2.0 License"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.6.1-0d9488?style=flat-square" alt="Version v1.6.1"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.7.0-0d9488?style=flat-square" alt="Version v1.7.0"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/arch-Local--First%20%7C%20Zero--Deps-orange?style=flat-square" alt="Zero Dependencies"></a>
   <a href="server.json"><img src="https://img.shields.io/badge/MCP-8%20Tools%20%7C%20MCP%20App-purple?style=flat-square" alt="MCP 8 Tools and MCP App"></a>
@@ -68,7 +68,7 @@ compass --demo
 
 和 Coding Agent 聊久了做项目，最容易遇到四件事：
 
-| 你经常遇到的抓狂时刻 | 以前 | 用了 **Compass v1.6.1** 之后 |
+| 你经常遇到的抓狂时刻 | 以前 | 用了 **Compass v1.7.0** 之后 |
 | :--- | :--- | :--- |
 | **随口提个备选思路，AI 当圣旨直接改代码** | 对话和代码混在一起，AI 抢跑实现未决方案 | 新想法自动放进「待确认想法」，你点确认或勾选「直接定案」才算正式基准 |
 | **聊到第 20 轮忘了主目标和当前重点** | 目标被几十轮日志和报错淹没，新开窗口就失忆 | 顶部永久固定 **核心目标** + **当前下一步**，做完还能点 **「✓ 标记已完成」** |

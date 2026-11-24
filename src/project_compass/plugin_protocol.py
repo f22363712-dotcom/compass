@@ -187,7 +187,7 @@ def build_compact_project_context(
                 "kind": kind,
                 "status": status,
                 "short_title": short_label,
-                "warning": "尚未定案，严禁当作已确认需求实现",
+                "warning": "尚未确认，严禁当作已确认需求实现",
             })
         if kind == "task" and fact.get("task_state") != "completed":
             open_pitfalls.append({
@@ -279,9 +279,9 @@ def build_compact_project_context(
 
     goal_short = summarize_node_title(core_goal, max_chars=26) if core_goal != "核心目标待确定" else "核心目标待确定"
     if compact_accepted or core_goal_status == "accepted":
-        line_1 = f"已定案基准 {len(compact_accepted)} 条；目标「{goal_short}」（{'已确定' if core_goal_status == 'accepted' else '待确认'}）。"
+        line_1 = f"已确认事项 {len(compact_accepted)} 条；目标「{goal_short}」（{'已确认' if core_goal_status == 'accepted' else '待确认'}）。"
     elif core_goal_status == "proposed":
-        line_1 = f"暂无已定案基准：目标「{goal_short}」及全部讨论仍属待确认想法，实现前需向用户确认。"
+        line_1 = f"暂无已确认事项：目标「{goal_short}」及全部讨论仍属待确认想法，实现前需向用户确认。"
     else:
         line_1 = "新项目还没定目标：首次明确目标或关键取舍时，请调用 record_note 写入 15 字短标题。"
 

@@ -36,10 +36,10 @@ class PluginManifestTests(unittest.TestCase):
         server = json.loads((root / "server.json").read_text(encoding="utf-8"))
         index_html = (root / "src" / "project_compass" / "web" / "index.html").read_text(encoding="utf-8")
 
-        self.assertEqual(expected_version, "1.6.1")
+        self.assertEqual(expected_version, "1.7.0")
         self.assertEqual(manifest["version"], expected_version)
         self.assertEqual(server["version"], expected_version)
-        self.assertIn("v1.6", index_html)
+        self.assertIn("v1.7", index_html)
         self.assertNotIn("your-org", json.dumps(server))
         self.assertNotIn("0.15s", server["description"])
 

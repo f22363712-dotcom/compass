@@ -437,7 +437,8 @@ class DashboardTest(unittest.TestCase):
         app = (Path(__file__).parents[1] / "src/project_compass/web/app.js").read_text(encoding="utf-8")
         self.assertNotIn("Lead Reviewer", app)
         self.assertNotIn('reviewer-input").value = reviewer', app)
-        self.assertEqual(app.count("请先填写负责人姓名"), 2)
+        # v1.7: 团队模式空署名改为 toast 提示，各入口分别提示
+        self.assertEqual(app.count("请先填写负责人姓名"), 6)
 
     def test_http_inline_review_contract_and_presence_mutation(self):
         from project_compass.project_workspace import ProjectWorkspace

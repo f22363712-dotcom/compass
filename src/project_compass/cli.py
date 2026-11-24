@@ -92,7 +92,19 @@ def _review_callback(events, project_workspace: ProjectWorkspace, project_path: 
             if needs_source_review(source_states(events, [fact])[fact.id]):
                 raise ValueError('source is superseded or unavailable; review the current source before promoting a fact')
             direction_fields=direction_review_fields(action,fact,accepted) if action in DIRECTION_ACTIONS else {}
-            if action=='accept_fact' and any(item.get("fact_id") == fact.id for item in accepted):
+            latest_accept_state = next(
+                (
+                    item for item in reversed(history)
+                    if item.get("fact_id") == fact.id and item.get("action") != "confirm_relation"
+                ),
+                None,
+            )
+            already_accepted = (
+                latest_accept_state.get("action") == "accept_fact"
+                if latest_accept_state is not None
+                else any(item.get("fact_id") == fact.id for item in accepted)
+            )
+            if action == 'accept_fact' and already_accepted:
                 raise ValueError("fact already accepted")
             source_state = source_states(events, [fact])[fact.id]
             active_request = next((item for item in reversed(history) if item.get("fact_id") == fact.id and item.get("action") == "request_evidence"), None)

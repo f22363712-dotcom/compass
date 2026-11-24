@@ -505,7 +505,7 @@ def deliver_ui_for_host(
             "daemon_reused": bool(daemon_info.get("reused")),
             "browser_opened": False,
             "user_action_hint": (
-                f"请在右侧内置预览浏览器打开 {url} 查看完整主看板；工作区定案后可直接写入优先执行列表。"
+                f"请在右侧内置预览浏览器打开 {url} 查看完整 Compass 工作台；确认事项后可直接加入待优先处理。"
                 if url
                 else "后台本地网页看板未启动（当前为只读/样例或受限测试模式）。"
             ),
