@@ -6,7 +6,7 @@ const context=vm.createContext({console,AbortController,setTimeout,clearTimeout,
 assert.equal(vm.runInContext('typeof reasonPreviewHTML',context),'function','Reason preview renderer missing');
 context.preview={enabled:true,preview_only:true,unavailable_targets:0,candidates:[{id:'r',target_fact_id:'f',target_quote:'选择 <script>local</script>',member_id:'Alice',status:'accepted',relation_type_suggested:'hypothesized_reason',summary:'可能 <img src=x onerror=bad()>',assumptions:['前提 <b>待验</b>'],source_quotes:[{source_id:'s',quote:'原话 <script>data</script>',member_id:'Bob',reported_by:'codex',claim_type:'assistant_report',observed_at:'2026-10-20T00:00:00Z',source_kind:'assistant_message'}],counter_evidence:[],scope_source_ids:['s']}],gaps:[{target_fact_id:'f',target_quote:'本地',member_id:'Alice',text:'原因尚待确认',scope_source_ids:['s']}]};
 const html=vm.runInContext('reasonPreviewHTML(preview)',context);
-assert.ok(html.includes('推断假说')&&html.includes('待核对')&&html.includes('前提'));
+assert.ok(html.includes('系统推测原因')&&html.includes('待确认')&&html.includes('前提'));
 assert.ok(html.includes('data-evidence-id="s"')&&html.includes('data-fact-id="f"'));
 assert.ok(html.includes('&lt;script&gt;')&&!html.includes('<script>')&&!html.includes('<img src='));
 assert.ok(!html.includes('data-action=')&&!html.includes('已确认原因'));

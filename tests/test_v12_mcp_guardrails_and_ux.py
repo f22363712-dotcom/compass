@@ -44,6 +44,26 @@ class V12GuardrailsAndUXTests(unittest.TestCase):
         goal_short = summarize_node_title(goal_raw, max_chars=28)
         self.assertEqual(goal_short, "实时交互纪要与低认知负载掌控台")
 
+        btn_trap = "一步到位同步升级：把 AGY 插件内嵌页升级成 v1.6.1 大白话新版（补齐「✓ 标记已完成」与历史折叠）"
+        btn_short = summarize_node_title(btn_trap, max_chars=34)
+        self.assertNotEqual(btn_short, "✓ 标记已完成")
+        self.assertIn("一步到位同步升级", btn_short)
+
+        dangling_raw = "零依赖 Python 与原生网页底座 +「本地高精度规则与可选大模型增强」"
+        dangling_short = summarize_node_title(dangling_raw, max_chars=20)
+        self.assertFalse(dangling_short.endswith(("「…", "+「…", "+…")))
+
+        short_head = summarize_node_title("自动区分来源：你在对话里亲手点选的方案直接记为对话已定", max_chars=22)
+        self.assertIn("自动区分来源", short_head)
+
+        decimal_keep = summarize_node_title("Python 3.10. 支持零依赖本地运行", max_chars=24)
+        self.assertIn("3.10", decimal_keep)
+        self.assertIn("支持零依赖", decimal_keep)
+
+        abbrev_keep = summarize_node_title("参考 No. 1 方案实现本地归档", max_chars=24)
+        self.assertIn("No. 1", abbrev_keep)
+        self.assertIn("方案实现本地归档", abbrev_keep)
+
         with tempfile.TemporaryDirectory() as raw_tmp:
             repo = Path(raw_tmp) / "repo"
             repo.mkdir()
@@ -185,7 +205,7 @@ class V12GuardrailsAndUXTests(unittest.TestCase):
             self.assertEqual(len(compact["pending_proposals"]), 2)
             self.assertEqual(len(compact["open_pitfalls"]), 1)
             self.assertEqual(len(compact["nudge_lines"]), 2)
-            self.assertIn("暂无已定案基准", compact["nudge_lines"][0])
+            self.assertIn("暂无已确认事项", compact["nudge_lines"][0])
 
     def test_record_note_and_verify_completion_mcp_and_http_parity_and_degradation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -250,19 +270,116 @@ class V12GuardrailsAndUXTests(unittest.TestCase):
             # 4. Passing verification passes gate while warning about open pitfall
             pass_ev = EvidenceEvent("cmd-pass-2", "s-v12", "fang", "test_result", "OK", datetime.now(timezone.utc) + timedelta(seconds=2), {"member_id": "fang", "exit_code": 0})
             ws.save([pass_ev])
-            res_pass_gate = mcp_srv.handle({
-                "jsonrpc": "2.0",
-                "id": 4,
-                "method": "tools/call",
-                "params": {
-                    "name": "verify_completion",
-                    "arguments": {"summary": "修通所有测试", "changed_files": ["src/app.py"], "test_evidence_ids": ["cmd-pass-2"]},
-                },
-            })
+            with patch("project_compass.host_adapter.Path.home", return_value=root / "no-sidecar-home"), patch.dict(
+                os.environ, {}, clear=True
+            ):
+                res_pass_gate = mcp_srv.handle({
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "verify_completion",
+                        "arguments": {"summary": "修通所有测试", "changed_files": ["src/app.py"], "test_evidence_ids": ["cmd-pass-2"]},
+                    },
+                })
             gate_pass = res_pass_gate["result"]["structuredContent"]
             self.assertTrue(gate_pass["passed"])
             self.assertEqual(gate_pass["verdict"], "warn")
             self.assertTrue(any(w["code"] == "open_pitfalls_remaining" for w in gate_pass["warnings"]))
+            self.assertIn("open_compass", gate_pass.get("board_action_markdown", ""))
+            self.assertTrue(any("看板直达入口" in line for line in gate_pass.get("nudge_lines") or []))
+
+            # 4b. complete_fact clears next_consensus cleanly instead of leaving completed plans active
+            next_ev = EvidenceEvent(
+                "ev-next-1",
+                "s-v12",
+                "fang",
+                "user_message",
+                "下一步：完成 v1.4 测试并验收",
+                datetime.now(timezone.utc) + timedelta(seconds=3),
+                {
+                    "member_id": "fang",
+                    "facts": [
+                        {
+                            "kind": "task",
+                            "subject_key": "project.next_step",
+                            "value": "完成 v1.4 测试并验收",
+                            "quote": "下一步：完成 v1.4 测试并验收",
+                            "source_id": "ev-next-1",
+                            "source_start": 4,
+                            "source_end": 16,
+                        }
+                    ],
+                },
+            )
+            ws.save([next_ev])
+            pre_state = build_dashboard_state([next_ev], project_path=str(project))
+            next_fact = pre_state.get("next_consensus")
+            self.assertIsNotNone(next_fact)
+            completed_entry = {
+                "action": "complete_fact",
+                "fact_id": next_fact["fact_id"],
+                "reviewer": "fang",
+                "observed_at": (datetime.now(timezone.utc) + timedelta(seconds=4)).isoformat(),
+            }
+            post_fact_only = build_dashboard_state([next_ev], project_path=str(project), fact_reviews=[completed_entry])
+            self.assertIsNone(post_fact_only.get("next_consensus"))
+            post_ws = build_dashboard_state(ws.load(), project_path=str(project), review_history=[completed_entry])
+            if post_ws.get("next_consensus") is not None:
+                self.assertNotEqual(post_ws["next_consensus"].get("fact_id"), next_fact["fact_id"])
+
+            # 4c. complete_fact followed by accept_fact retains completed state, and reject_fact clears next_consensus & gate pitfalls
+            accept_after_done = {
+                "action": "accept_fact",
+                "fact_id": next_fact["fact_id"],
+                "subject_key": "project.next_step",
+                "reviewer": "fang",
+                "observed_at": (datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat(),
+            }
+            post_both = build_dashboard_state(
+                [next_ev],
+                project_path=str(project),
+                fact_reviews=[accept_after_done],
+                review_history=[completed_entry, accept_after_done],
+            )
+            self.assertIsNone(post_both.get("next_consensus"))
+            done_fact_row = next(f for f in post_both["team"]["facts"] if f["id"] == next_fact["fact_id"])
+            self.assertTrue(done_fact_row.get("completed"))
+            self.assertEqual(done_fact_row.get("task_state"), "completed")
+            self.assertFalse(any(q["fact_id"] == next_fact["fact_id"] for q in post_both.get("team_review_queue") or []))
+
+            reject_entry = {
+                "action": "reject_fact",
+                "fact_id": next_fact["fact_id"],
+                "reviewer": "fang",
+                "observed_at": (datetime.now(timezone.utc) + timedelta(seconds=6)).isoformat(),
+            }
+            post_rejected = build_dashboard_state([next_ev], project_path=str(project), review_history=[reject_entry])
+            self.assertIsNone(post_rejected.get("next_consensus"))
+            rej_gate = evaluate_completion_gate(
+                post_rejected,
+                [next_ev, pass_ev],
+                summary="驳回旧任务",
+                changed_files=["src/app.py"],
+                test_evidence_ids=["cmd-pass-2"],
+            )
+            self.assertEqual(rej_gate["open_pitfalls"], [])
+            # Also verify superseded & reported_complete & rejected_path are excluded from completion_gate
+            synthetic_state = {
+                "handoff_brief": {"focus_goal": {"value": "Goal"}},
+                "review_history": [],
+                "team": {
+                    "facts": [
+                        {"id": "f-sup", "kind": "assumption", "status": "proposed", "value": "old assumption", "superseded_by_fact_id": "f-new"},
+                        {"id": "f-rep", "kind": "task", "status": "proposed", "value": "reported done", "task_state": "reported_complete"},
+                        {"id": "f-rej-path", "kind": "decision", "status": "proposed", "value": "rejected branch", "decision_context": {"stage": "rejected_path"}},
+                    ],
+                    "conflicts": [],
+                },
+            }
+            clean_gate = evaluate_completion_gate(synthetic_state, [pass_ev], summary="清理", changed_files=["src/app.py"], test_evidence_ids=["cmd-pass-2"])
+            self.assertEqual(clean_gate["open_pitfalls"], [])
+            self.assertEqual(clean_gate["pending_proposals"], [])
 
             # 5. Sidecar critic timeout degrades gracefully (fail-warn, never blocks) & SAMPLE_MODE skips sidecar
             state_obj = build_dashboard_state(ws.load(), project_path=str(project))
@@ -320,6 +437,8 @@ class V12GuardrailsAndUXTests(unittest.TestCase):
             self.assertEqual(second.count(RULES_BEGIN_MARKER), 1)
             self.assertIn("`alice`", second)
             self.assertIn("Keep custom user rule.", second)
+            gitignore_text = (proj / ".gitignore").read_text(encoding="utf-8")
+            self.assertEqual(gitignore_text.count(".project-memory/"), 1)
 
             # Real repository docs/files must contain 0 private user path leaks
             exporter_path = REPO_ROOT / "scripts" / "export_public_release.py"

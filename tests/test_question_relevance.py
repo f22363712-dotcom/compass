@@ -153,7 +153,7 @@ class QuestionRelevanceTests(unittest.TestCase):
         events=self.records()
         answer=investigate(events,'还缺什么证据？').to_dict()
         self.assertTrue(answer['findings'])
-        self.assertTrue(any('候选事实仍未负责人确认' in gap for gap in answer['evidence_gaps']))
+        self.assertTrue(any('待确认想法仍未负责人确认' in gap for gap in answer['evidence_gaps']))
 
     def test_english_broad_state_routing_words_do_not_rerank_unrelated_decision(self):
         events=self.records()+self.record('title','Current metadata belongs in the index.',days=6)

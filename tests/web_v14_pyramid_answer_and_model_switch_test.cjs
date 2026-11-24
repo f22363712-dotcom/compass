@@ -50,7 +50,7 @@ const stateDay1 = {
     enabled: true,
     mode: "cloud_llm",
     model: "MiniMax-M3.1-Flash",
-    provider_label: "语义增强 · MiniMax-M3.1-Flash",
+    provider_label: "AI 辅助 · MiniMax-M3.1-Flash",
     active_profile: "minimax-m3.1-flash",
     profiles: [
       { id: "minimax-m3.1-flash", label: "MiniMax-M3.1-Flash", mode: "cloud_llm", model: "MiniMax-M3.1-Flash" },
@@ -103,7 +103,7 @@ const stateDeepSeek = {
   llm_status: {
     ...stateDay1.llm_status,
     model: "deepseek-chat",
-    provider_label: "语义增强 · deepseek-chat",
+    provider_label: "AI 辅助 · deepseek-chat",
     active_profile: "deepseek-chat",
   },
 };
@@ -192,7 +192,7 @@ async function main() {
   // Verify switching model posts to /api/llm-mode and auto-refreshes open investigation
   await vm.runInContext('switchLlmProfile("deepseek-chat")', context);
   assert.ok(requests.some((r) => r.url === "/api/llm-mode" && r.opts.body.includes("deepseek-chat")));
-  assert.equal(element("llm-status-badge").textContent, "语义增强 · deepseek-chat");
+  assert.equal(element("llm-status-badge").textContent, "AI 辅助 · deepseek-chat");
   assert.ok(requests.filter((r) => r.url === "/api/investigate").length >= 2, "Switching model should refresh open answer");
 
   console.log("v1.4 pyramid answer, bottom folded source_warnings & runtime model switcher verified.");

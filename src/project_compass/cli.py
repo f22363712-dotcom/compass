@@ -14,7 +14,7 @@ from .codex_extractor import CodexExtractor
 from .evidence_linking import build_evidence_index, build_requested_evidence_relations, confirm_relation
 from .fact_engine import derive_facts
 from .investigator import investigate
-from .sample_data import sample_events
+from .sample_data import sample_events, showcase_sample_events
 from .project_scanner import scan_project
 from .project_workspace import ProjectWorkspace
 from .projections import build_views
@@ -69,7 +69,7 @@ def _review_callback(events, project_workspace: ProjectWorkspace, project_path: 
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 **({"note": note.strip()} if note.strip() else {}),
             })
-        elif action in {"reject_fact", "request_evidence"}:
+        elif action in {"reject_fact", "request_evidence", "complete_fact"}:
             fact = next((item for item in derive_facts(events) if item.id == target_id), None)
             if fact is None:
                 raise ValueError("fact not found")
@@ -92,7 +92,19 @@ def _review_callback(events, project_workspace: ProjectWorkspace, project_path: 
             if needs_source_review(source_states(events, [fact])[fact.id]):
                 raise ValueError('source is superseded or unavailable; review the current source before promoting a fact')
             direction_fields=direction_review_fields(action,fact,accepted) if action in DIRECTION_ACTIONS else {}
-            if action=='accept_fact' and any(item.get("fact_id") == fact.id for item in accepted):
+            latest_accept_state = next(
+                (
+                    item for item in reversed(history)
+                    if item.get("fact_id") == fact.id and item.get("action") != "confirm_relation"
+                ),
+                None,
+            )
+            already_accepted = (
+                latest_accept_state.get("action") == "accept_fact"
+                if latest_accept_state is not None
+                else any(item.get("fact_id") == fact.id for item in accepted)
+            )
+            if action == 'accept_fact' and already_accepted:
                 raise ValueError("fact already accepted")
             source_state = source_states(events, [fact])[fact.id]
             active_request = next((item for item in reversed(history) if item.get("fact_id") == fact.id and item.get("action") == "request_evidence"), None)
@@ -150,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the Project Compass golden path")
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--sample", action="store_true")
+    source.add_argument("--demo", action="store_true", help="Launch an interactive local demo web board with a Chinese showcase project")
     source.add_argument("--input", type=Path, help="JSON evidence array")
     source.add_argument("--codex-jsonl", type=Path, help="Codex public session events in JSONL")
     source.add_argument("--scan", type=Path, help="Scan an existing project directory")
@@ -170,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--codex-tools', action='store_true', help='Opt into bounded public exec text call/result pairs from the selected thread')
     parser.add_argument("--codex-sessions-root", type=Path, default=Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "sessions", help="Native rollout root for the selected thread")
     parser.add_argument("--web", action="store_true", help="Start the local personal/team dashboard")
+    parser.add_argument("--no-browser", action="store_true", help="Do not auto-open the system browser when starting --demo")
     parser.add_argument('--reason-preview',type=Path,help='Read a project-bound private reason experiment as a model-free, read-only preview')
     parser.add_argument('--derived-context', type=Path, help='Read a project-bound code-structure JSON as a read-only derived context')
     parser.add_argument('--extract-docs', action='store_true', help='Deterministically extract bounded candidate facts from scanned project docs')
@@ -192,12 +206,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.list_projects:
             print(json.dumps(ProjectWorkspace.list_registered(args.workspace_root), ensure_ascii=False, indent=2))
             return 0
-        if not any((args.sample, args.input, args.codex_jsonl, args.scan, args.open)):
+        if not any((args.sample, args.demo, args.input, args.codex_jsonl, args.scan, args.open)):
             if os.environ.get('SAMPLE_MODE', '').strip().casefold() == 'true':
                 args.sample = True
+        if args.demo and not any((args.export_format, args.evidence_index, args.state)):
+            args.web = True
         if args.index_code:
-            if args.sample:
-                raise ValueError("--index-code cannot run with --sample")
+            if args.sample or args.demo:
+                raise ValueError("--index-code cannot run with --sample or --demo")
             from .code_index import build_code_index, code_index_summary
             target_root = Path(args.scan or args.open or Path.cwd()).resolve()
             index_payload = build_code_index(target_root)
@@ -213,17 +229,18 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
-        if not any((args.sample, args.input, args.codex_jsonl, args.scan, args.open)):
-            parser.error('select a source (--sample, --input, --codex-jsonl, --scan, --open), or set SAMPLE_MODE=true')
+        if not any((args.sample, args.demo, args.input, args.codex_jsonl, args.scan, args.open)):
+            parser.error('select a source (--sample, --demo, --input, --codex-jsonl, --scan, --open), or set SAMPLE_MODE=true')
+        is_synthetic_sample = bool(args.sample or args.demo)
         if args.reason_preview and not (args.web and (args.scan or args.open)):
             raise ValueError('--reason-preview requires a real web workspace; sample mode cannot read private reason previews')
         if args.derived_context and not (args.web and (args.scan or args.open)):
             raise ValueError('--derived-context requires --web with --scan or --open')
         if args.with_code_index and not (args.scan or args.open):
             raise ValueError('--with-code-index requires --scan or --open')
-        if args.extract_docs and args.sample:
+        if args.extract_docs and is_synthetic_sample:
             raise ValueError('sample mode cannot enable model, sponsor or native project inputs')
-        if args.sample and (args.extract_codex or args.enable_extraction or args.codex_thread or args.codex_tools or args.scan_codex_jsonl or args.agent_access_file or args.reason_preview or args.derived_context or args.antigravity_transcript or args.extract_docs or args.with_code_index):
+        if is_synthetic_sample and (args.extract_codex or args.enable_extraction or args.codex_thread or args.codex_tools or args.scan_codex_jsonl or args.agent_access_file or args.reason_preview or args.derived_context or args.antigravity_transcript or args.extract_docs or args.with_code_index):
             raise ValueError('sample mode cannot enable model, sponsor or native project inputs')
         if args.agent_access_file and not (args.web and (args.scan or args.open)):
             raise ValueError('--agent-access-file requires --web and a real --scan or --open workspace')
@@ -241,13 +258,22 @@ def main(argv: list[str] | None = None) -> int:
         project_workspace = None
         project_path = None
         derived_context = None
-        if args.sample:
-            events = sample_events()
+        if args.sample or args.demo:
+            events = showcase_sample_events() if args.demo else sample_events()
             if args.web:
-                project_workspace = ProjectWorkspace(args.workspace_root / 'sample', PROJECT_ROOT / 'examples')
+                sample_ws_dir = args.workspace_root / ("demo" if args.demo else "sample")
+                default_examples = PROJECT_ROOT / "examples"
+                if args.demo or not default_examples.is_dir():
+                    synthetic_proj_dir = args.workspace_root / ("demo-podcast-clipper" if args.demo else "sample-project")
+                    synthetic_proj_dir.mkdir(parents=True, exist_ok=True)
+                else:
+                    synthetic_proj_dir = default_examples
+                project_workspace = ProjectWorkspace(sample_ws_dir, synthetic_proj_dir)
                 project_path = str(project_workspace.project_path)
-                if not project_workspace.exists():
-                    project_workspace.save(events, {'source': 'sample', 'synthetic': True})
+                if args.demo:
+                    project_workspace.save(events, {"source": "demo", "synthetic": True})
+                elif not project_workspace.exists():
+                    project_workspace.save(events, {"source": "sample", "synthetic": True})
                 events = project_workspace.load()
         elif args.codex_jsonl:
             events = EvidenceStore.load_jsonl(args.codex_jsonl).list()
@@ -340,11 +366,30 @@ def main(argv: list[str] | None = None) -> int:
                 return load_workspace_derived_context(project_workspace)
             return None
         if args.web:
-            if not (args.scan or args.open or args.sample):
-                raise ValueError("--web requires --scan, --open or --sample")
+            if not (args.scan or args.open or args.sample or args.demo):
+                raise ValueError("--web requires --scan, --open, --sample or --demo")
             if project_workspace is None:
                 raise ValueError("web mode requires a persisted project workspace")
             confirmed_relations, review_history, fact_reviews = project_workspace.load_review_state()
+            if args.demo and not fact_reviews:
+                settled_keys = {"project.goal", "arch.storage", "project.next_step"}
+                seeded = [
+                    {
+                        "action": "accept_fact",
+                        "fact_id": f.id,
+                        "subject_key": f.subject_key,
+                        "kind": f.kind.value,
+                        "value": f.value,
+                        "evidence_ids": list(f.evidence_ids),
+                        "source_ref": f.source_ref,
+                        "reviewer": "小陈",
+                        "observed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    for f in derive_facts(events)
+                    if f.subject_key in settled_keys
+                ]
+                fact_reviews = list(seeded)
+                review_history = list(seeded)
             review_callback, confirmed_relations, review_history, fact_reviews = _review_callback(
                 events, project_workspace, str(project_path), confirmed_relations, review_history, fact_reviews
             )
@@ -355,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
             derived_context = _resolve_derived_context()
             rescan_helper = (
                 ProjectRescan(project_workspace, events, extract_docs=bool(args.extract_docs))
-                if not args.sample
+                if not is_synthetic_sample
                 else None
             )
             run_dashboard(
@@ -368,17 +413,18 @@ def main(argv: list[str] | None = None) -> int:
                 review_callback=review_callback,
                 refresh_callback=refresh_callback,
                 intake_status=intake_status,
-                sample_mode=args.sample,
+                sample_mode=is_synthetic_sample,
                 rescan_callback=rescan_helper.refresh if rescan_helper else None,
                 extraction_jobs=ExtractionJobs(project_workspace, events, args.member_id,
                     usage_logger=_log_model_usage, max_batches=args.extraction_max_batches,
                     max_tokens=args.extraction_max_tokens, automatic=args.auto_extract, session_members=session_members) if args.enable_extraction else None,
                 agent_inbox=AgentInbox.from_file(args.agent_access_file, project_workspace, events) if args.agent_access_file else None,
                 reason_preview=reason_preview,
-                workspace_root=None if args.sample else args.workspace_root,
-                project_scan_job=None if args.sample else ProjectScanJob(args.workspace_root),
+                workspace_root=None if is_synthetic_sample else args.workspace_root,
+                project_scan_job=None if is_synthetic_sample else ProjectScanJob(args.workspace_root),
                 derived_context=derived_context,
                 auto_doc_sync=(rescan_helper.sync_if_docs_changed if (rescan_helper and args.extract_docs) else None),
+                **({"open_browser": True} if (args.demo and not args.no_browser) else {}),
             )
             return 0
         if args.export_format:

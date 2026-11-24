@@ -267,6 +267,7 @@ class ProjectWorkspace:
         """Produce an Inline & Spill compact context from local persisted state."""
         from .dashboard import build_dashboard_state
         from .plugin_protocol import ProjectContext, build_compact_project_context
+        from .team_templates import extract_priority_dispatches
 
         events = self.load() if self.exists() else []
         confirmed, history, fact_reviews = self.load_review_state() if self.exists() else ([], [], [])
@@ -278,5 +279,10 @@ class ProjectWorkspace:
             fact_reviews=fact_reviews,
         )
         ctx = ProjectContext.for_project(self.project_path, member_id, session_id, agent)
-        return build_compact_project_context(ctx, state, events)
+        compact = build_compact_project_context(ctx, state, events)
+        dispatches = extract_priority_dispatches(events)
+        compact["priority_dispatches"] = dispatches
+        if isinstance(compact.get("inline"), dict):
+            compact["inline"]["priority_dispatch_count"] = len(dispatches)
+        return compact
 

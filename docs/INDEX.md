@@ -40,6 +40,12 @@
 | [COMPASS_V1_2_DELIVERY_REPORT_2026-11-16.md](COMPASS_V1_2_DELIVERY_REPORT_2026-11-16.md) | Compass v1.2 交付与实测验收报告（`553` 单测、18 个 `.cjs` 双时区、`eval` L1–L5、stdio 6 工具与三视口浏览器验证） |
 | [COMPASS_V1_3_DELIVERY_AND_BENCHMARK_2026-11-16.md](COMPASS_V1_3_DELIVERY_AND_BENCHMARK_2026-11-16.md) | Compass v1.3 交付与同题三方对比测评报告（v1.2 基线 vs v1.3 纯本地检索 vs MiniMax-M2.7 语义增强） |
 | [COMPASS_V1_4_MODEL_BENCHMARK_AND_UX_SEAL_2026-11-16.md](COMPASS_V1_4_MODEL_BENCHMARK_AND_UX_SEAL_2026-11-16.md) | Compass v1.4 四方模型横评、追问倒金字塔重塑、在线切模型与 v1.x 底座封板报告 |
+| [COMPASS_V1_5_MULTI_AGENT_AND_SIDECAR_BENCHMARK_2026-11-19.md](COMPASS_V1_5_MULTI_AGENT_AND_SIDECAR_BENCHMARK_2026-11-19.md) | Compass v1.5.0 Antigravity 原生 Sidecar 副栏、Codex/Hermes 五档跨宿主自适应架构、轻量化与实测对照报告 |
+| [COMPASS_REVIEW_2026-11-20.md](COMPASS_REVIEW_2026-11-20.md) | Compass v1.5 能力只审不改全面体检报告（识别率、内容丰富度、顾问能力与 10 项指标） |
+| [COMPASS_V1_6_ARCHITECTURE_AND_DIFFERENTIATION_2026-11-20.md](COMPASS_V1_6_ARCHITECTURE_AND_DIFFERENTIATION_2026-11-20.md) | Compass v1.6 竞品深拆（6 大成熟项目）、零依赖精准吸收清单与差异化技术架构方案 |
+| [COMPASS_V1_6_CAPABILITY_BENCHMARK_2026-11-20.md](COMPASS_V1_6_CAPABILITY_BENCHMARK_2026-11-20.md) | Compass v1.6 三项核心能力定量对照、独立 L1–L5 对照、真实会话留出集与轮询性能实测报告 |
+| [COMPASS_V1_6_CLAUDE_REVIEW_2026-11-20.md](COMPASS_V1_6_CLAUDE_REVIEW_2026-11-20.md) | Compass v1.6 独立 PBR 八维只读审查报告及 P0–P2 闭环整改验证结论 |
+| [STAGE_A_EXECUTION_AND_LAUNCH_PLAYBOOK_2026-11-21.md](STAGE_A_EXECUTION_AND_LAUNCH_PLAYBOOK_2026-11-21.md) | Stage A 体验去黑话整改、GitHub 组织迁移与小红书 / B 站首发推广实操手册 |
 
 ---
 

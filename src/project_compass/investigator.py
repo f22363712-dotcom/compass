@@ -301,7 +301,7 @@ def investigate(events: list[EvidenceEvent], question: str, fact_reviews=(), con
             evidence_ids=(event.id,),
             assumptions=(),
             conflicts=(),
-            next_action="核对该原始证据的具体内容，若具有权威性可提议为候选事实。",
+            next_action="核对该原始证据的具体内容，若确认为正式结论可记入待确认想法。",
             acceptance_condition="通过证据 ID 精确反查溯源完整原始内容。",
             evidence_gaps=(),
             findings=({
@@ -420,7 +420,7 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
         subjects = {f.subject_key for f in member_facts}
         facts = [f for f in facts if f.subject_key in subjects]
     if not facts:
-        gap = "已采集材料尚未生成带来源的候选事实，无法判断项目当前状态和项目下一步。" if events else "尚未采集项目证据，无法判断项目状态。"
+        gap = "已采集材料尚未整理出带来源的待确认想法，无法判断项目当前状态和下一步。" if events else "尚未采集项目证据，无法判断项目状态。"
         return InvestigationAnswer(
             question=question,
             conclusion="证据不足，当前无法形成项目状态结论。",
@@ -512,15 +512,15 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
         next_action = '先检查变更后的来源并重新提取候选，再由负责人核对当前状态。'
         acceptance = '旧来源和确认历史保留，新版本的候选有独立证据且不会自动继承确认。'
     elif not current_accepted:
-        next_action = "先核对候选事实的来源，再由项目负责人确认团队状态。"
-        acceptance = "确认记录包含负责人和来源，候选事实不会自动成为团队事实。"
+        next_action = "先核对这些待确认想法的来源，再由项目负责人确认。"
+        acceptance = "确认记录包含负责人和来源，待确认想法不会自动变成已确认事项。"
     else:
         next_action = "按已确认的团队事实推进，并核对剩余证据缺口。"
         acceptance = "当前团队事实保持 accepted，来源证据和历史冲突均可在看板中打开。"
     if gap_query:
         pending_gap_facts = [fact for fact in facts if status(fact) != "accepted"]
         if pending_gap_facts:
-            gaps.insert(0, f"{len(pending_gap_facts)} 条候选事实仍未负责人确认，需要核对对应来源和当前性。")
+            gaps.insert(0, f"{len(pending_gap_facts)} 条待确认想法仍未负责人确认，需要核对对应来源和当前性。")
         if warnings:
             gaps.insert(0, f"{len(warnings)} 条声明的来源已换版或不可用，需要补充当前版本证据。")
         if not pending_gap_facts and not warnings:
@@ -638,26 +638,26 @@ def _investigate_claims(events, question, fact_reviews, confirmed_relations, *, 
             next_action = clean_display_text(chosen_next.value)
             next_action_status = status(chosen_next)
             next_action_basis = finding(chosen_next)
-            acceptance = "按已定案的下一步工作共识推进，并在完成后更新看板记录。"
+            acceptance = "按已确认的当前下一步推进，并在完成后更新工作台记录。"
             if unresolved:
-                gaps.append(f"另有 {len(unresolved)} 处历史或分支分歧待核对，详情见看板分歧对照。")
+                gaps.append(f"另有 {len(unresolved)} 处分歧待确认，详情见工作台分歧对照。")
         elif not unresolved and pending:
             chosen_pending = pending[0]
             only_static_pending = _is_static_doc_fact(chosen_pending) and status(chosen_pending) != "accepted"
             live_cands = [f for f in extracted if not _is_static_doc_fact(f) and status(f) != "accepted"]
             if only_static_pending and not scope and live_cands:
                 live_lead = next((f for f in live_cands if f.kind in {FactKind.DECISION, FactKind.ASSUMPTION}), live_cands[0])
-                next_action = f"核对并定案活跃候选「{clean_display_text(live_lead.value, max_chars=48)}」，并在看板设定当前下一步。"
+                next_action = f"核对并确认活跃待确认项「{clean_display_text(live_lead.value, max_chars=48)}」，并在工作台设定当前下一步。"
                 next_action_status = status(live_lead)
                 next_action_basis = finding(live_lead)
-                acceptance = "确认或改写上述活跃候选，历史计划文档勾选不自动作为当前下一步。"
+                acceptance = "确认或改写上述活跃事项，历史计划文档勾选不自动作为当前下一步。"
             else:
                 next_action = chosen_pending.value if scope else clean_display_text(chosen_pending.value)
                 next_action_status = status(chosen_pending)
                 next_action_basis = finding(chosen_pending)
                 acceptance = "按来源原文核对该待办的结果与验收条件；尚未确认的完成报告须由项目负责人审核。"
         if any(status(fact) != "accepted" for fact in extracted):
-            gaps.append("部分来源声明仍待负责人确认；已确认条目单独标记为已定案。")
+            gaps.append("部分来源声明仍待确认；已确认条目单独标记为已确认。")
         gaps.append("本次检索覆盖当前有效记录，未确认条目的适用性仍需结合来源时间核对。")
         clean_goal = clean_display_text(goal, max_chars=52)
         if completed_items:

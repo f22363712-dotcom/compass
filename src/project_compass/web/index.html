@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Compass · AI 开发实时纪要与项目掌控台</title>
+  <title>Compass 工作台 · 实时项目助手</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -13,20 +13,20 @@
       <img class="brand-logo" src="/logo.svg" alt="Compass Logo" width="32" height="32">
       <span class="brand-meta">
         <strong>COMPASS</strong>
-        <small>实时开发纪要 · 项目掌控台 v1.4</small>
+        <small>实时项目助手 · v1.7</small>
       </span>
     </a>
     <div id="session-presence-bar" class="session-presence-bar" role="toolbar" aria-label="多会话在场状态"></div>
     <div class="topbar-actions">
-      <div id="work-mode-switch" class="work-mode-switch" role="group" aria-label="选择使用路线">
-        <button type="button" class="mode-pill" data-work-mode="solo" title="个人开发路线：聚焦个人实时轨迹、待定思路与项目基准">个人路线</button>
-        <button type="button" class="mode-pill" data-work-mode="team" title="团队协作路线：开启多成员在场、分歧裁决与交接审批">团队路线</button>
+      <div id="work-mode-switch" class="work-mode-switch" role="group" aria-label="选择协作模式">
+        <button type="button" class="mode-pill" data-work-mode="solo" title="个人模式：聚焦个人想法、待办清单与已确认事项">个人模式</button>
+        <button type="button" class="mode-pill" data-work-mode="team" title="团队协作模式：开启多成员在场、分歧对照与项目确认">团队协作模式</button>
       </div>
       <button type="button" id="btn-handoff-brief" class="handoff-cta-btn" aria-haspopup="dialog">
-        <span class="sparkle-icon" aria-hidden="true">↗</span><span id="handoff-brief-label">交接简报</span>
+        <span class="sparkle-icon" aria-hidden="true">↗</span><span id="handoff-brief-label">续写快照</span>
       </button>
-      <span id="llm-status-badge" class="status-badge is-proposed" title="当前检索与语义引擎状态">本地检索</span>
-      <select id="llm-profile-select" class="llm-profile-select" aria-label="切换语义引擎" hidden></select>
+      <span id="llm-status-badge" class="status-badge is-proposed" title="当前检索与 AI 模式状态">本地检索</span>
+      <select id="llm-profile-select" class="llm-profile-select" aria-label="切换 AI 模式" hidden></select>
       <div class="connection">
         <span class="pulse" aria-hidden="true"></span>
         <span id="connection-label">本地工作区</span>
@@ -38,13 +38,13 @@
   <main class="shell">
     <section class="hero" aria-label="项目标头与视图切换">
       <div class="hero-id">
-        <p class="eyebrow">证据索引 · <span id="evidence-count">0</span> 条</p>
+        <p class="eyebrow">原始记录 · <span id="evidence-count">0</span> 条</p>
         <h1 id="project-title">Compass</h1>
-        <p class="hero-copy" id="hero-copy">新项目已就绪 · 对话或随手记下目标，脑图将实时生长。</p>
+        <p class="hero-copy" id="hero-copy">新项目已就绪 · 对话或随手记下目标，思维导图将实时生长。</p>
       </div>
       <div class="view-switch" role="group" aria-label="选择视图">
-        <button type="button" id="lens-personal-btn" class="lens active" data-lens="personal">个人视图 · 个人看板</button>
-        <button type="button" id="lens-team-btn" class="lens" data-lens="team">团队共识 · 事实基准</button>
+        <button type="button" id="lens-personal-btn" class="lens active" data-lens="personal">实时纪要 · 待确认想法</button>
+        <button type="button" id="lens-team-btn" class="lens" data-lens="team">已确认事项</button>
       </div>
     </section>
 
@@ -56,9 +56,9 @@
         </label>
         <label class="reviewer-field">
           <span class="field-tag" id="reviewer-field-tag">负责人</span>
-          <input id="reviewer-input" type="text" placeholder="填写姓名后可确认事实" autocomplete="off">
+          <input id="reviewer-input" type="text" placeholder="填写姓名后可确认事项" autocomplete="off">
         </label>
-        <span class="toolbar-note" id="toolbar-note">候选关系需负责人确认 · 原始证据追加保留</span>
+        <span class="toolbar-note" id="toolbar-note">待确认记录需人工确认 · 原始记录追加保留</span>
       </div>
       <div class="layer-switch" role="group" aria-label="选择信息层">
         <button type="button" class="layer-choice active" data-layer-choice="overview">概览</button>
@@ -70,22 +70,22 @@
     <section class="metrics layer-section" data-layer="overview" id="metrics" aria-label="项目概览指标"></section>
 
     <section class="solo-workbench-bar layer-section" data-layer="overview" id="solo-workbench-bar" aria-label="随手记与工作台视图">
-      <form id="quick-note-form" class="quick-note-bar" aria-label="随手记一条思路或待办">
+      <form id="quick-note-form" class="quick-note-bar" aria-label="随手记一条想法或待办">
         <select id="quick-note-kind" aria-label="记录类型">
-          <option value="decision">待定决策</option>
+          <option value="decision">方案决定</option>
           <option value="assumption">未验证前提</option>
           <option value="task">待办事项</option>
           <option value="goal">核心目标</option>
         </select>
-        <input id="quick-note-input" type="text" maxlength="2000" placeholder="随手记一条思路、前提或待办，自动沉淀可溯源记录…">
-        <label class="quick-note-accept-wrap" id="quick-note-accept-wrap"><input id="quick-note-accept" type="checkbox"><span id="quick-note-accept-label">直接定案为基准</span></label>
-        <button type="submit" id="quick-note-submit">记一笔</button>
+        <input id="quick-note-input" type="text" maxlength="2000" placeholder="随手记一条想法、前提或待办，自动沉淀可溯源记录…">
+        <label class="quick-note-accept-wrap" id="quick-note-accept-wrap"><input id="quick-note-accept" type="checkbox"><span id="quick-note-accept-label">同时标记为已确认</span></label>
+        <button type="submit" id="quick-note-submit">记一条</button>
         <span id="quick-note-feedback" class="quick-note-feedback" aria-live="polite"></span>
       </form>
       <div id="workbench-view-bar" class="workbench-view-bar" role="group" aria-label="个人工作台视图切换">
         <button type="button" class="workbench-view-btn active" id="view-list-btn" data-workbench-view="list">清单台账</button>
-        <button type="button" class="workbench-view-btn" id="view-mindmap-btn" data-workbench-view="mindmap">思维脑图</button>
-        <span class="workbench-view-hint" id="workbench-view-hint">按待定思路与已定案基准分栏核对</span>
+        <button type="button" class="workbench-view-btn" id="view-mindmap-btn" data-workbench-view="mindmap">思维导图</button>
+        <span class="workbench-view-hint" id="workbench-view-hint">按待确认想法与已确认事项分栏核对</span>
       </div>
     </section>
 
@@ -102,23 +102,23 @@
           <div id="goal-actions" class="goal-actions"></div>
           <div class="anchor-divider"></div>
           <div class="surface-head next-anchor-head">
-            <span class="eyebrow" id="next-consensus-kicker">下一步工作共识</span>
+            <span class="eyebrow" id="next-consensus-kicker">当前下一步</span>
             <span class="status-pill" id="next-consensus-status">待设定</span>
           </div>
           <h3 class="next-consensus-title" id="next-consensus-title">暂未设定当前下一步</h3>
           <p id="next-consensus-note">用一句话锁定眼下推进焦点，避免被历史文档清单干扰。</p>
           <div id="next-consensus-actions" class="goal-actions"></div>
           <form id="anchor-inline-form" class="anchor-inline-form" hidden>
-            <input id="anchor-inline-input" type="text" maxlength="240" autocomplete="off" placeholder="输入简练的一句话并保存定案…">
-            <button type="submit" id="anchor-inline-save" class="mini-btn accept-btn">定案保存</button>
+            <input id="anchor-inline-input" type="text" maxlength="240" autocomplete="off" placeholder="输入简练的一句话并保存确认…">
+            <button type="submit" id="anchor-inline-save" class="mini-btn accept-btn">保存并确认</button>
             <button type="button" id="anchor-inline-cancel" class="mini-btn">取消</button>
           </form>
         </section>
 
-        <section class="ledger-band agent-hints-surface layer-section" data-layer="overview" id="agent-hints-surface" aria-label="Agent 提示" hidden>
+        <section class="ledger-band agent-hints-surface layer-section" data-layer="overview" id="agent-hints-surface" aria-label="AI 提醒" hidden>
           <div class="surface-head">
-            <span class="eyebrow" id="agent-hints-kicker">Agent 提示</span>
-            <span class="count" id="agent-hints-mode">本地规则</span>
+            <span class="eyebrow" id="agent-hints-kicker">AI 提醒</span>
+            <span class="count" id="agent-hints-mode">规则提醒</span>
           </div>
           <div id="agent-hints-list" class="agent-hints-list"></div>
         </section>
@@ -131,7 +131,7 @@
           <form id="investigation-form" class="investigation-form">
             <label for="investigation-question" id="investigation-label">输入关键词搜全文，或直接提问当前目标与下一步</label>
             <div class="question-row">
-              <input id="investigation-question" type="text" placeholder="搜任意词（如：脑图、MCP、锁）或提问：下一步做什么？" autocomplete="off">
+              <input id="investigation-question" type="text" placeholder="搜任意词（如：思维导图、MCP、锁）或提问：下一步做什么？" autocomplete="off">
               <button id="investigate-submit" type="submit" disabled>搜词 / 查证据</button>
             </div>
           </form>
@@ -152,11 +152,11 @@
           </div>
           <div class="reading-rule">
             <span class="rule-dot confirmed-dot" aria-hidden="true"></span>
-            <div><strong id="legend-accepted-title">已确认关系</strong><p id="legend-accepted-desc">负责人已经确认的事实与依据关系。</p></div>
+            <div><strong id="legend-accepted-title">已确认依据</strong><p id="legend-accepted-desc">负责人已经确认的结论与依据关联。</p></div>
           </div>
           <div class="reading-rule">
             <span class="rule-dot candidate-dot" aria-hidden="true"></span>
-            <div><strong>候选关系</strong><p id="legend-candidate-desc">材料可能支持该结论，仍待人工核对。</p></div>
+            <div><strong>待确认关联</strong><p id="legend-candidate-desc">材料可能支持该结论，仍待确认。</p></div>
           </div>
           <div class="reading-rule">
             <span class="rule-dot raw-dot" aria-hidden="true"></span>
@@ -202,7 +202,7 @@
               <div id="investigation-stats-list" class="investigation-stats-list"></div>
               <div class="stats-actions">
                 <button type="button" id="export-state" class="export-button">导出当前状态</button>
-                <button type="button" id="clear-query-stats" class="quiet-button">清除调查统计</button>
+                <button type="button" id="clear-query-stats" class="quiet-button">清除检索统计</button>
               </div>
             </section>
           </div>
@@ -214,7 +214,7 @@
         <!-- PERSONAL VIEW ABOVE-THE-FOLD WORKBENCH -->
         <section class="ledger-band personal-band layer-section" data-layer="overview" id="personal-todos">
           <div class="surface-head">
-            <span class="eyebrow" id="personal-todos-kicker">待办与坑位</span>
+            <span class="eyebrow" id="personal-todos-kicker">待办事项</span>
             <span class="count" id="personal-todos-count">0</span>
           </div>
           <div id="personal-todo-list" class="todo-list"></div>
@@ -222,7 +222,7 @@
 
         <section class="ledger-band personal-band layer-section" data-layer="overview" id="personal-decisions">
           <div class="surface-head">
-            <span class="eyebrow" id="personal-decisions-kicker">待拍板思路</span>
+            <span class="eyebrow" id="personal-decisions-kicker">待确认想法</span>
             <span class="count" id="personal-decisions-count">0</span>
           </div>
           <div id="personal-decision-list" class="decision-list"></div>
@@ -230,10 +230,18 @@
 
         <section class="ledger-band personal-band layer-section" data-layer="overview" id="solo-baseline-surface" hidden>
           <div class="surface-head">
-            <span class="eyebrow" id="solo-baseline-kicker">已定案基准</span>
+            <span class="eyebrow" id="solo-baseline-kicker">已确认事项</span>
             <span class="count" id="solo-baseline-count">0</span>
           </div>
           <div id="solo-baseline-list" class="decision-list"></div>
+        </section>
+
+        <section class="ledger-band personal-band layer-section" data-layer="overview" id="priority-dispatch-surface" hidden>
+          <div class="surface-head">
+            <span class="eyebrow" id="priority-dispatch-kicker">待优先处理</span>
+            <span class="count" id="priority-dispatch-count">0</span>
+          </div>
+          <div id="priority-dispatch-list" class="decision-list"></div>
         </section>
 
         <section class="ledger-band personal-band layer-section" data-layer="overview" id="personal-evidence-requests" hidden>
@@ -256,14 +264,14 @@
 
         <section class="ledger-band review-surface layer-section" data-layer="overview" id="team-review-queue" hidden>
           <div class="surface-head">
-            <span class="eyebrow" id="review-queue-kicker">待审候选</span>
+            <span class="eyebrow" id="review-queue-kicker">待确认队列</span>
             <span class="count" id="team-review-count">0</span>
           </div>
           <div id="team-review-list" class="review-queue"></div>
         </section>
 
         <!-- PROCESS LAYER SECTIONS (Distinct timeline-first hierarchy) -->
-        <section class="ledger-band trace-surface layer-section" data-layer="process" aria-label="项目历程与决策图">
+        <section class="ledger-band trace-surface layer-section" data-layer="process" aria-label="项目历程与演变">
           <div class="surface-head">
             <span class="eyebrow">项目历程</span>
             <span class="count" id="trace-count">0</span>
@@ -276,9 +284,9 @@
             </div>
           </div>
           <div class="trace-legend">
-            <span class="trace-wire candidate">引用关联待核对</span>
+            <span class="trace-wire candidate">引用关联待确认</span>
             <span class="trace-wire confirmed">支持关系已确认</span>
-            <span id="trace-confirm-note">负责人确认单独标记 · 时间顺序不代表因果</span>
+            <span id="trace-confirm-note">确认状态单独标记 · 时间顺序不代表因果</span>
           </div>
           <div class="trace-scroller" id="trace-scroller" tabindex="0" role="region" aria-label="横向项目历程，可左右滚动">
             <div class="trace-track" id="trace-track"></div>
@@ -314,7 +322,7 @@
 
         <section class="ledger-band facts-surface layer-section" data-layer="process">
           <div class="surface-head">
-            <span class="eyebrow" id="facts-kicker">个人候选事实</span>
+            <span class="eyebrow" id="facts-kicker">待确认与近期记录</span>
             <span class="count" id="facts-count">0</span>
           </div>
           <div id="fact-list" class="fact-list"></div>
@@ -323,7 +331,7 @@
         <!-- SOURCE LAYER SECTION -->
         <section class="ledger-band layer-section" data-layer="source">
           <div class="surface-head evidence-head">
-            <span class="eyebrow" id="evidence-kicker">个人证据链</span>
+            <span class="eyebrow" id="evidence-kicker">原始记录列表</span>
             <div class="evidence-tools">
               <input id="evidence-filter" type="search" placeholder="筛选证据" aria-label="筛选证据">
               <span class="count" id="spine-count">0</span>
@@ -339,7 +347,7 @@
       <div class="surface-head">
         <span class="eyebrow" id="thinking-kicker">阶段演进</span>
         <div class="thinking-controls">
-          <span class="status-pill reversal-pill" id="thinking-reversal-badge" hidden>0 处换版需复核</span>
+          <span class="status-pill reversal-pill" id="thinking-reversal-badge" hidden>0 处原文件已更新</span>
           <button type="button" class="quiet-button" id="thinking-clear-filter" hidden>清除阶段筛选</button>
         </div>
       </div>
@@ -357,7 +365,7 @@
       <button type="button" class="icon-button" id="drawer-close" aria-label="关闭证据抽屉">×</button>
     </div>
     <div id="drawer-body" class="drawer-body">
-      <p class="empty">点击任意事实卡片、引用徽标 [id] 或原文列表项查看完整来源快照（按 Esc 关闭抽屉）。</p>
+      <p class="empty">点击任意卡片、依据胶囊或原始记录查看完整来源内容（按 Esc 关闭抽屉）。</p>
     </div>
   </aside>
 
@@ -367,14 +375,14 @@
         <div class="handoff-title-wrap">
           <span class="eyebrow">上下文快照</span>
           <h2 id="handoff-modal-title">项目交接简报</h2>
-          <p class="handoff-subtitle" id="handoff-modal-subtitle">汇集当前已确认团队共识、待审候选事实与下一步行动清单</p>
+          <p class="handoff-subtitle" id="handoff-modal-subtitle">汇集当前已确认事项、待确认想法与下一步行动清单</p>
         </div>
         <div class="handoff-head-actions">
           <button type="button" id="handoff-copy-btn" class="handoff-action-btn primary-btn">复制简报</button>
           <button type="button" id="handoff-export-issue-btn" class="handoff-action-btn secondary-btn" title="导出 GitHub Issue 模板">导出 Issue</button>
           <button type="button" id="handoff-export-pr-btn" class="handoff-action-btn secondary-btn" title="导出 Pull Request 描述">导出 PR</button>
           <button type="button" id="handoff-export-prd-btn" class="handoff-action-btn secondary-btn" title="导出完整 PRD 需求规格书">导出 PRD</button>
-          <button type="button" id="handoff-export-mindmap-btn" class="handoff-action-btn secondary-btn" title="导出 Mermaid 思维脑图 Markdown">导出脑图</button>
+          <button type="button" id="handoff-export-mindmap-btn" class="handoff-action-btn secondary-btn" title="导出 Mermaid 思维导图 Markdown">导出思维导图</button>
           <button type="button" id="handoff-close-btn" class="icon-button" aria-label="关闭简报">×</button>
         </div>
       </div>
@@ -383,6 +391,7 @@
   </aside>
 
   <div id="citation-popover" class="citation-popover" role="tooltip" aria-hidden="true" hidden></div>
+  <div id="compass-toast" class="compass-toast" role="status" aria-live="polite" hidden></div>
   <div id="scrim" class="scrim" hidden></div>
 
   <script src="/app.js"></script>

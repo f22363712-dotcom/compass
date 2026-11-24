@@ -18,7 +18,7 @@ const context=vm.createContext({console,AbortController,setTimeout,clearTimeout,
 async function main(){vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),context);await new Promise(r=>setImmediate(r));
  const cards=element('fact-list').innerHTML;
  assert.ok(cards.includes(`datetime="${sourceTime}"`),'Card lacks original source timestamp');
- assert.ok(cards.includes('来源记录时间')&&cards.includes('当前有效性待核对'));
+ assert.ok(cards.includes('来源记录时间')&&cards.includes('当前有效性待确认'));
  assert.ok(element('goal-note').textContent.includes('来源记录时间'),'Goal hides source time');
  vm.runInContext("openFact('old')",context);
  assert.ok(element('drawer-body').innerHTML.includes(sourceTime)&&element('drawer-body').innerHTML.includes('session-Alice'));
@@ -37,7 +37,7 @@ async function main(){vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),co
   next_action_basis:{...old,quote:old.value,member_id:'Alice'}};
  context.answerFixture=answer;vm.runInContext('renderInvestigation(answerFixture)',context);
  let html=element('investigation-answer').innerHTML;
- assert.ok(html.includes('候选下一步')&&html.includes(sourceTime)&&html.includes('source-old'));
+ assert.ok(html.includes('待确认下一步')&&html.includes(sourceTime)&&html.includes('source-old'));
  assert.ok(html.includes('当前版本需核对'));
  answer.next_action_status='accepted';answer.next_action_basis={...answer.next_action_basis,status:'accepted',
   source_kind:'file_snapshot',reviewed_at:reviewTime,reviewed_by:'owner <script>'};

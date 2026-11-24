@@ -34,14 +34,25 @@ class RelationProvider(Protocol):
 class DeterministicLinkProvider:
     """Offline, auditable relation suggestions used by default."""
 
-    def suggest(self, fact: CandidateFact, evidence: EvidenceEvent) -> RelationSuggestion | None:
-        explicit_ids = _explicit_ids(evidence)
-        if fact.id in explicit_ids or evidence.id in fact.evidence_ids:
+    def suggest(
+        self,
+        fact: CandidateFact,
+        evidence: EvidenceEvent,
+        *,
+        explicit_ids: set[str] | None = None,
+        content_folded: str | None = None,
+        value_folded: str | None = None,
+    ) -> RelationSuggestion | None:
+        resolved_explicit = _explicit_ids(evidence) if explicit_ids is None else explicit_ids
+        if fact.id in resolved_explicit or evidence.id in fact.evidence_ids:
             return RelationSuggestion(EvidenceRelationMethod.EXPLICIT, 1.0, "explicit-reference")
 
         value = fact.value
-        if value and value.casefold() in evidence.content.casefold():
-            return RelationSuggestion(EvidenceRelationMethod.DETERMINISTIC, 0.9, "exact-text-match")
+        if value:
+            needle = value.casefold() if value_folded is None else value_folded
+            haystack = evidence.content.casefold() if content_folded is None else content_folded
+            if needle in haystack:
+                return RelationSuggestion(EvidenceRelationMethod.DETERMINISTIC, 0.9, "exact-text-match")
 
         if evidence.kind in {"test_result", "tool_result"} and fact.kind is FactKind.TASK:
             if evidence.author == fact.author and evidence.session_id == fact.session_id:
@@ -175,38 +186,81 @@ def _explicit_ids(event: EvidenceEvent) -> set[str]:
 
 
 def _eligible_pairs(events: list[EvidenceEvent], facts: list[CandidateFact]) -> list[tuple[CandidateFact, EvidenceEvent]]:
+    from bisect import bisect_right
+    from collections import defaultdict
+
     pairs: list[tuple[CandidateFact, EvidenceEvent]] = []
     if not events or not facts:
         return pairs
-    events_by_id = {event.id: event for event in events}
-    sessions = [fact.session_id or next(
+    events_by_id: dict[str, EvidenceEvent] = {}
+    indices_by_id: dict[str, list[int]] = defaultdict(list)
+    explicit_by_fact: dict[str, list[int]] = defaultdict(list)
+    contents: list[str] = []
+    for idx, event in enumerate(events):
+        events_by_id[event.id] = event
+        indices_by_id[event.id].append(idx)
+        for fid in _explicit_ids(event):
+            explicit_by_fact[fid].append(idx)
+        contents.append(event.content.casefold())
+
+    sessions = [
+        fact.session_id
+        or next(
             (events_by_id[source_id].session_id for source_id in fact.evidence_ids if source_id in events_by_id),
             None,
-        ) for fact in facts]
+        )
+        for fact in facts
+    ]
     task_counts = Counter((fact.author, session) for fact, session in zip(facts, sessions) if fact.kind is FactKind.TASK)
+    single_task_results: dict[tuple[str, str | None], list[int]] = defaultdict(list)
+    for idx, event in enumerate(events):
+        if event.kind in {"test_result", "tool_result"} and task_counts[event.author, event.session_id] == 1:
+            single_task_results[(event.author, event.session_id)].append(idx)
+
     # Per-read preparation preserves input order and duplicate entries. No state
     # survives this call, so changed source text/metadata cannot reuse old matches.
-    prepared = [(event, _explicit_ids(event), event.content.casefold()) for event in events]
+    sep = "\0"
+    joined_corpus = sep.join(contents)
+    end_offsets: list[int] = []
+    cursor = 0
+    for content in contents:
+        cursor += len(content)
+        end_offsets.append(cursor)
+        cursor += 1
+    needle_cache: dict[str, tuple[int, ...]] = {}
+
+    def _needle_indices(needle: str) -> tuple[int, ...]:
+        cached = needle_cache.get(needle)
+        if cached is not None:
+            return cached
+        if not needle:
+            matched: tuple[int, ...] = ()
+        elif sep in needle:
+            matched = tuple(idx for idx, content in enumerate(contents) if needle in content)
+        else:
+            hits: list[int] = []
+            pos = joined_corpus.find(needle)
+            while pos != -1:
+                ev_idx = bisect_right(end_offsets, pos)
+                hits.append(ev_idx)
+                pos = joined_corpus.find(needle, end_offsets[ev_idx] + 1)
+            matched = tuple(hits)
+        needle_cache[needle] = matched
+        return matched
+
     for fact, fact_session in zip(facts, sessions):
-        needle = fact.value.casefold() if fact.value else ''
+        needle = fact.value.casefold() if fact.value else ""
         matching_fact = replace(fact, session_id=fact_session) if fact.session_id is None else fact
-        for event, explicit_ids, content in prepared:
-            if event.id in fact.evidence_ids:
-                pairs.append((matching_fact, event))
-                continue
-            if fact.id in explicit_ids:
-                pairs.append((matching_fact, event))
-                continue
-            if event.kind in {"test_result", "tool_result"} and fact.kind is FactKind.TASK:
-                same_author = event.author == fact.author
-                same_session = event.session_id == fact_session
-                if same_author and same_session and task_counts[event.author, event.session_id] == 1:
-                    pairs.append((matching_fact, event))
-                elif needle and needle in content:
-                    pairs.append((matching_fact, event))
-                continue
-            if needle and needle in content:
-                pairs.append((matching_fact, event))
+        candidate_indices: set[int] = set()
+        for source_id in fact.evidence_ids:
+            candidate_indices.update(indices_by_id.get(source_id, ()))
+        candidate_indices.update(explicit_by_fact.get(fact.id, ()))
+        if fact.kind is FactKind.TASK:
+            candidate_indices.update(single_task_results.get((fact.author, fact_session), ()))
+        if needle:
+            candidate_indices.update(_needle_indices(needle))
+        for ev_idx in sorted(candidate_indices):
+            pairs.append((matching_fact, events[ev_idx]))
     return pairs
 
 
@@ -223,11 +277,34 @@ def build_evidence_index(
     selected_provider = provider or deterministic
     relations: list[EvidenceRelation] = []
     relation_keys: set[tuple[str, str]] = set()
+    explicit_by_ev: dict[int, set[str]] = {}
+    folded_by_ev: dict[int, str] = {}
+    folded_by_fact: dict[int, str] = {}
     for fact, event in _eligible_pairs(events, facts):
-        fallback = deterministic.suggest(fact, event)
+        ev_key = id(event)
+        ev_explicit = explicit_by_ev.get(ev_key)
+        if ev_explicit is None:
+            ev_explicit = _explicit_ids(event)
+            explicit_by_ev[ev_key] = ev_explicit
+        ev_folded = folded_by_ev.get(ev_key)
+        if ev_folded is None:
+            ev_folded = event.content.casefold()
+            folded_by_ev[ev_key] = ev_folded
+        fact_key = id(fact)
+        val_folded = folded_by_fact.get(fact_key)
+        if val_folded is None:
+            val_folded = fact.value.casefold() if fact.value else ""
+            folded_by_fact[fact_key] = val_folded
+        fallback = deterministic.suggest(
+            fact,
+            event,
+            explicit_ids=ev_explicit,
+            content_folded=ev_folded,
+            value_folded=val_folded,
+        )
         if fallback is None:
             continue
-        suggestion = selected_provider.suggest(fact, event) or fallback
+        suggestion = fallback if selected_provider is deterministic else (selected_provider.suggest(fact, event) or fallback)
         key = (fact.id, event.id)
         if key in relation_keys:
             continue

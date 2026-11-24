@@ -62,7 +62,16 @@ class RealMCPClientTests(unittest.TestCase):
                 tools, append, state, self_query, proposed = asyncio.run(run_client())
                 self.assertEqual(
                     {tool.name for tool in tools.tools},
-                    {"project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"},
+                    {
+                        "project_context",
+                        "append_evidence",
+                        "query_state",
+                        "propose_fact",
+                        "record_note",
+                        "verify_completion",
+                        "open_compass",
+                        "compass_app_action",
+                    },
                 )
                 def is_error(result):
                     return getattr(result, "is_error", getattr(result, "isError", False))

@@ -12,11 +12,12 @@ class PluginManifestTests(unittest.TestCase):
         self.assertEqual(manifest["mcpServers"], "./mcp.json")
         server = config["mcpServers"]["project-compass"]
         self.assertEqual(server["type"], "stdio")
-        self.assertEqual(server["command"], "project-compass-mcp")
+        self.assertEqual(server["command"], "compass-mcp")
+        self.assertEqual(server["args"], ["--project-path", "."])
         serialized = json.dumps(config)
         self.assertNotIn("TYPESAFE_API_KEY", serialized)
         self.assertNotIn("Bearer ", serialized)
-        self.assertIn("SET_IN_HOST_ENVIRONMENT", serialized)
+        self.assertNotIn("SET_IN_HOST_ENVIRONMENT", serialized)
 
     def test_version_and_honesty_across_manifests(self):
         import re
@@ -35,10 +36,10 @@ class PluginManifestTests(unittest.TestCase):
         server = json.loads((root / "server.json").read_text(encoding="utf-8"))
         index_html = (root / "src" / "project_compass" / "web" / "index.html").read_text(encoding="utf-8")
 
-        self.assertEqual(expected_version, "1.4.0")
+        self.assertEqual(expected_version, "1.7.0")
         self.assertEqual(manifest["version"], expected_version)
         self.assertEqual(server["version"], expected_version)
-        self.assertIn("v1.4", index_html)
+        self.assertIn("v1.7", index_html)
         self.assertNotIn("your-org", json.dumps(server))
         self.assertNotIn("0.15s", server["description"])
 

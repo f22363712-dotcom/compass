@@ -1,16 +1,30 @@
 {
-  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/schema/server.json",
-  "name": "project-compass",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.f22363712-dotcom/project-compass",
   "title": "Compass",
-  "description": "Real-time interactive development notes & evidence-backed project control center for solo builders and teams coding with AI. Track actions, tentative decisions, and confirmed baselines via MCP.",
-  "version": "1.4.0",
+  "description": "Real-time interactive development notes & evidence-backed project control center for solo builders and teams coding with AI.",
+  "version": "1.7.0",
   "license": "Apache-2.0",
+  "repository": {
+    "url": "https://github.com/f22363712-dotcom/compass",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registry_type": "pypi",
+      "identifier": "project-compass",
+      "version": "1.7.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
   "transport": {
     "type": "stdio"
   },
   "runtime": "python",
   "command": "uvx",
-  "args": ["project-compass-mcp", "--project-path", "."],
+  "args": ["--from", "project-compass", "compass-mcp", "--project-path", "."],
   "capabilities": {
     "tools": [
       {
@@ -36,6 +50,14 @@
       {
         "name": "verify_completion",
         "description": "Run pre-completion deterministic check against confirmed baselines, open pitfalls, and verification evidence before claiming done."
+      },
+      {
+        "name": "open_compass",
+        "description": "Open the live Compass right-pane interactive MCP App workbench with cold-start doc bootstrap."
+      },
+      {
+        "name": "compass_app_action",
+        "description": "Handle interactive workbench actions inside the Compass MCP App pane."
       }
     ]
   },

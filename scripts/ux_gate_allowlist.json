@@ -1,0 +1,101 @@
+{
+  "banned_legacy_terms": [
+    "定锚",
+    "拍板",
+    "施工队列",
+    "工作共识",
+    "候选关系",
+    "证据脊柱",
+    "正交",
+    "语义引擎",
+    "语义提示",
+    "项目共识",
+    "投机校验",
+    "核验防线",
+    "证伪",
+    "坑位",
+    "定案",
+    "裁决",
+    "冲突双方",
+    "候选事实",
+    "采纳",
+    "个人路线",
+    "团队路线",
+    "脑图"
+  ],
+  "legacy_term_allowlist": [
+    {
+      "path_prefix": "src/project_compass/eval/",
+      "contains": "",
+      "why": "Historical benchmark track fixtures must remain immutable for regression comparison."
+    },
+    {
+      "path_prefix": "src/project_compass/projections.py",
+      "contains": "",
+      "why": "Core state projection module frozen for v1.7 boundary; internal reasoning strings stay untouched."
+    },
+    {
+      "path_prefix": "src/project_compass/decision_graph.py",
+      "contains": "脑图",
+      "why": "Parser input regex recognizes natural user phrasing in transcripts."
+    },
+    {
+      "path_prefix": "src/project_compass/investigator.py",
+      "contains": "'脑图',",
+      "why": "Query matcher keyword set recognizes legacy user search phrasing."
+    },
+    {
+      "path_prefix": "src/project_compass/decision_graph.py",
+      "contains": "拍板",
+      "why": "Parser input regex recognizes natural user phrasing from transcripts."
+    },
+    {
+      "path_prefix": "src/project_compass/agent_hints.py",
+      "contains": "待定锚点",
+      "why": "Internal stable category enum key mapped to plain Chinese in hintCategoryLabel."
+    },
+    {
+      "path_prefix": "src/project_compass/web/app.js",
+      "contains": "\"待定锚点\": \"还没定目标\"",
+      "why": "Maps internal category enum key to plain-language UI display label."
+    },
+    {
+      "path_prefix": "src/project_compass/agent_hints.py",
+      "contains": "严禁使用「",
+      "why": "Negative prompt instruction forbidding AI from emitting jargon."
+    },
+    {
+      "path_prefix": "src/project_compass/dashboard.py",
+      "contains": "下一步工作共识",
+      "why": "Backward-compatible markdown summary anchor covered by existing snapshot/markdown compatibility expectations."
+    },
+    {
+      "path_prefix": "src/project_compass/completion_gate.py",
+      "contains": "遗留坑位",
+      "why": "Internal supervisor prompt phrasing paired with accepted/pending state."
+    },
+    {
+      "path_prefix": "src/project_compass/team_templates.py",
+      "contains": "缺陷坑位记录",
+      "why": "Existing role brief key retained across template schema compatibility tests."
+    }
+  ],
+  "required_motion_tokens": [
+    "--motion-fast",
+    "--motion-base",
+    "--motion-slow",
+    "--ease-out",
+    "--ease-in-out",
+    "--ease-exit"
+  ],
+  "forbidden_transition_properties": [
+    "width",
+    "height",
+    "top",
+    "left",
+    "right",
+    "bottom",
+    "margin",
+    "padding"
+  ]
+}

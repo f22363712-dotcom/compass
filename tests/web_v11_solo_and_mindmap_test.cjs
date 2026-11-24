@@ -353,7 +353,7 @@ async function main() {
   assert.ok(!h.element("legend-accepted-desc").textContent.includes("负责人"), "Solo legend leaked 负责人");
 
   const decHTML = h.element("personal-decision-list").innerHTML;
-  assert.ok(decHTML.includes("待拍板决策") && decHTML.includes("提供台账与正交脑图切换"), "Pending decisions missing group heading");
+  assert.ok(decHTML.includes("待确认方案决定") && decHTML.includes("提供台账与正交脑图切换"), "Pending decisions missing group heading");
   assert.ok(decHTML.includes("未验证前提") && decHTML.includes("全部 .cjs 测试均可脱离浏览器跑通"), "Pending assumptions missing group heading");
   assert.ok(!decHTML.includes("使用文件锁保护并发写盘"), "Accepted baseline leaked into pending list");
 
@@ -376,11 +376,11 @@ async function main() {
   h.workbenchBtns[1].click();
   assert.equal(h.documentMock.body.dataset.workbenchView, "mindmap");
   assert.equal(h.storage.get("compass_workbench_view"), "mindmap");
-  assert.ok(h.element("thinking-kicker").textContent.includes("思维脑图"));
+  assert.ok(h.element("thinking-kicker").textContent.includes("思维导图"));
   const treeHTML = h.element("thinking-line-canvas").innerHTML;
   assert.ok(treeHTML.includes("thinking-tree mindmap-layout") && treeHTML.includes("thinking-branch-actions"), "Mindmap layout classes missing");
 
-  await vm.runInContext('exportCognitiveAsset("mindmap", "handoff-export-mindmap-btn", "已导出脑图")', h.context);
+  await vm.runInContext('exportCognitiveAsset("mindmap", "handoff-export-mindmap-btn", "已导出思维导图")', h.context);
   assert.ok(h.requests.some((r) => r.url === "/api/export?format=mindmap"), "Mindmap export did not call format=mindmap");
   assert.ok(h.downloads.includes("compass-mindmap.md"), "Fallback export filename did not use compass- prefix");
   await h.element("export-state").click();
@@ -399,34 +399,30 @@ async function main() {
   assert.ok(h.element("personal-decision-list").innerHTML.includes("桌面端优先正交脑图降低记忆负荷"));
   assert.ok(h.element("thinking-line-canvas").innerHTML.includes("桌面端优先正交脑图降低记忆负荷"));
 
-  // 6. One-time inline Solo signer vs repeated click & Team empty guard
+  // 6. Auto-resolved Solo signer (zero modal friction) vs Team empty reviewer toast guard
+  h.element("evidence-drawer").hidden = true;
   h.element("reviewer-input").value = "";
   const pendingInlineBtn = h.element("personal-decision-list").querySelectorAll("[data-inline-review]")[0];
   pendingInlineBtn.click();
   await h.flush();
-  assert.equal(h.requests.filter((r) => r.url === "/api/review").length, 0, "Empty Solo signer sent POST /api/review prematurely");
-  assert.equal(h.element("evidence-drawer").hidden, false, "Solo inline signer did not open drawer");
-  const signerInput = h.element("evidence-drawer").querySelector("[data-solo-signer-input]");
-  const signerSubmit = h.element("evidence-drawer").querySelector("[data-solo-signer-submit]");
-  assert.ok(signerInput && signerSubmit, "Inline Solo signer controls missing in drawer");
-  signerInput.value = "fang";
-  await signerSubmit.click();
-  await h.flush();
-  assert.equal(h.storage.get("compass_reviewer_name"), "fang");
-  assert.equal(h.element("reviewer-input").value, "fang");
-  assert.equal(h.requests.filter((r) => r.url === "/api/review").length, 1, "Submitting inline Solo signer did not auto-resume acceptFact");
+  assert.equal(h.element("evidence-drawer").hidden, true, "Solo mode must auto-resolve signer without opening signer drawer");
+  assert.ok(!h.element("drawer-body").innerHTML.includes("data-solo-signer-input"), "Solo signer prompt unexpectedly rendered");
+  assert.ok(h.storage.get("compass_reviewer_name").length > 0, "Auto-resolved solo signer was not persisted");
+  assert.ok(h.element("reviewer-input").value.length > 0, "Auto-resolved solo signer did not populate reviewer input");
+  assert.equal(h.requests.filter((r) => r.url === "/api/review").length, 1, "First Solo accept did not immediately POST /api/review");
 
-  // Second inline accept executes with zero modal/drawer friction
+  // Second inline accept also executes with zero modal/drawer friction
   const secondInlineBtn = h.element("personal-todo-list").querySelectorAll("[data-inline-review]")[0];
   secondInlineBtn.click();
   await h.flush();
   assert.equal(h.requests.filter((r) => r.url === "/api/review").length, 2, "Second Solo accept failed to proceed directly without prompting");
 
-  // Switch to Team mode -> empty reviewer must trigger Team reviewer prompt
+  // Switch to Team mode -> empty reviewer triggers toast error instead of opening drawer
   vm.runInContext('setWorkMode("team");', h.context);
   h.element("reviewer-input").value = "";
   await vm.runInContext('acceptFact("fact-note-1", "accept_fact", { fromDrawer: false })', h.context);
-  assert.ok(h.element("drawer-body").innerHTML.includes("请先填写负责人姓名"), "Team mode did not enforce reviewer name");
+  assert.equal(h.element("compass-toast").hidden, false, "Team mode empty reviewer did not show toast");
+  assert.ok(h.element("compass-toast").textContent.includes("请先填写负责人姓名"), "Team mode did not enforce reviewer name");
 
   // Read-only disables quick note bar
   vm.runInContext('state.data.project.read_only = true; render();', h.context);

@@ -21,6 +21,11 @@ class CliTest(unittest.TestCase):
         self.assertIn("conclusion", payload)
         self.assertIn("conflicts", payload)
 
+    def test_demo_showcase_exports_podcast_scenario(self):
+        result = self.run_cli("--demo", "--export-format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("播客", result.stdout)
+
     def test_malformed_input_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "bad.json"

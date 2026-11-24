@@ -10,10 +10,14 @@ startCommand:
         type: string
         description: "Path to the local repository directory being governed"
         default: "."
-  commandFunction:
-    python:
-      command: "uvx"
-      args:
-        - "project-compass-mcp"
-        - "--project-path"
-        - "${config.projectPath}"
+  commandFunction: |-
+    (config) => ({
+      command: 'uvx',
+      args: [
+        '--from',
+        'project-compass',
+        'compass-mcp',
+        '--project-path',
+        config.projectPath || '.'
+      ]
+    })

@@ -4,14 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-compass"
-version = "1.4.0"
+version = "1.7.0"
 description = "Real-time interactive development notes and evidence-backed project control center for solo builders and teams coding with AI."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [{name = "Fang & Compass Contributors"}]
 keywords = ["mcp", "coding-agents", "provenance", "evidence-board", "local-first"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Documentation",
+]
 requires-python = ">=3.10"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/f22363712-dotcom/compass"
+Repository = "https://github.com/f22363712-dotcom/compass"
+Issues = "https://github.com/f22363712-dotcom/compass/issues"
 
 [project.optional-dependencies]
 test = ["mcp>=2.3.0"]
@@ -32,7 +47,13 @@ project-compass-eval = "project_compass.eval.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-project_compass = ["web/*"]
+project_compass = [
+  "web/*",
+  "antigravity_plugin/compass/*",
+  "antigravity_plugin/compass/assets/*",
+  "antigravity_plugin/compass/skills/compass/*",
+  "antigravity_plugin/compass/sidecars/compass_board/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

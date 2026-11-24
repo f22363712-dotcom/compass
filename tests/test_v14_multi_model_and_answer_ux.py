@@ -263,7 +263,7 @@ class V14MultiModelAndAnswerUXTests(unittest.TestCase):
                         state_payload = json.loads(resp.read().decode("utf-8"))
                     self.assertEqual(state_payload["llm_status"]["active_profile"], "deepseek-chat")
                     self.assertEqual(state_payload["llm_status"]["model"], "deepseek-chat")
-                    self.assertEqual(state_payload["llm_status"]["provider_label"], "语义增强 · deepseek-chat")
+                    self.assertEqual(state_payload["llm_status"]["provider_label"], "AI 辅助 · deepseek-chat")
                     self.assertEqual(len(srv.investigation_cache), 0)
 
                     bad_req = Request(

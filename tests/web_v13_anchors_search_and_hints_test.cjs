@@ -48,7 +48,7 @@ const initialState = {
   project: { project_id: "proj-v13", name: "Compass v13", evidence_count: 1, fact_count: 2, read_only: false },
   projects: [{ project_id: "proj-v13", project_name: "Compass v13" }],
   sample_mode: false,
-  llm_status: { enabled: true, mode: "cloud_llm", model: "MiniMax-M2.7", provider_label: "语义增强 · MiniMax-M2.7" },
+  llm_status: { enabled: true, mode: "cloud_llm", model: "MiniMax-M2.7", provider_label: "AI 辅助 · MiniMax-M2.7" },
   next_consensus: {
     fact_id: "f-next",
     kind: "task",
@@ -157,7 +157,7 @@ async function main() {
   vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
   await new Promise((r) => setTimeout(r, 20));
 
-  assert.equal(element("llm-status-badge").textContent, "语义增强 · MiniMax-M2.7");
+  assert.equal(element("llm-status-badge").textContent, "AI 辅助 · MiniMax-M2.7");
   assert.equal(element("goal-title").textContent, "打造高掌控工作台");
   assert.equal(element("next-consensus-title").textContent, "完成双锚点交互走查");
 
@@ -200,7 +200,7 @@ async function main() {
   };
   vm.runInContext("renderInvestigation(ansFixture)", context);
   const invHtml = element("investigation-answer").innerHTML;
-  assert.ok(invHtml.includes("语义归纳") && invHtml.includes("已采纳正交脑图作为右侧主视图"));
+  assert.ok(invHtml.includes("智能摘要") && invHtml.includes("已采纳正交脑图作为右侧主视图"));
   assert.ok(!invHtml.includes("**完成发布**"));
 
   console.log("v1.3 dual anchors, Agent hints, inline next_step save, search_excerpt & semantic summary verified.");

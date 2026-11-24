@@ -56,7 +56,7 @@ class CognitiveExportTest(unittest.TestCase):
         self.assertIn("实现双向认知资产流转", md)
         self.assertIn("- [x] **决策**：采用纯原生 Python + Web 架构", md)
         self.assertIn("- [ ] 完成 M2 导出引擎", md)
-        self.assertIn("- [ ] **待核对**：候选题案 A", md)
+        self.assertIn("- [ ] **待确认**：候选题案 A", md)
         self.assertIn("Total Evidence Items: 12", md)
 
     def test_export_pull_request(self) -> None:
@@ -65,7 +65,7 @@ class CognitiveExportTest(unittest.TestCase):
         self.assertIn("实现双向认知资产流转", md)
         self.assertIn("- [ ] 完成 M2 导出引擎", md)
         self.assertNotIn("- [x] 完成 M2 导出引擎", md)
-        self.assertIn("团队确认事实数**：5 项", md)
+        self.assertIn("已确认事项数**：5 项", md)
         self.assertIn("`antigravity`, `claude`", md)
         self.assertIn("- [ ] 单元测试全部通过（待提交前本地实跑核对）", md)
         self.assertIn("- [ ] 遵循 IEEE TSE 2001 PBR 三视角代码审查无 P0/P1 缺陷", md)
@@ -99,7 +99,7 @@ class CognitiveExportTest(unittest.TestCase):
         self.assertIn("阶段 02：方案推进 (9 项证据)", md)
         self.assertIn("目标根节点 (Goal Root)**：实现双向认知资产流转", md)
         self.assertIn("分支决策 [accepted]**：支持 GitHub Issue 与 PR 自动流转", md)
-        self.assertIn("[RFC/规范已采纳]**：采用纯原生 Python + Web 架构", md)
+        self.assertIn("[已确认规范]**：采用纯原生 Python + Web 架构", md)
 
     def test_export_state_by_format_mapping(self) -> None:
         body_json, mime_json, fn_json = export_state_by_format(self.mock_state, "json")

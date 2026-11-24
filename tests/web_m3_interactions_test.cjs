@@ -492,7 +492,7 @@ async function main() {
     assert.ok(!todoHtml.includes("任务状态：已实现"), "Blocked task claimed 已实现");
 
     const decHtml = h.element("personal-decision-list").innerHTML;
-    assert.ok(decHtml.includes("✓ 已确认共识") && decHtml.includes("is-accepted") && !decHtml.includes(">待核对<"), "Accepted team fact in personal list showed contradictory unaccepted badge");
+    assert.ok(decHtml.includes("✓ 已确认") && decHtml.includes("is-accepted") && !decHtml.includes(">待确认<"), "Accepted team fact in personal list showed contradictory unaccepted badge");
 
     // Read-only project must NEVER emit false ✓ 团队事实 for unaccepted task-b
     vm.runInContext("state.data.project.read_only = true; render();", h.context);
@@ -502,7 +502,7 @@ async function main() {
     // Rejected fact omits duplicate reject button
     vm.runInContext('state.data.project.read_only = false; state.data.review_history = [{ action: "reject_fact", fact_id: "task-b", reviewer: "lead" }]; render();', h.context);
     const rejTodoHtml = h.element("personal-todo-list").innerHTML;
-    assert.ok(rejTodoHtml.includes("is-rejected") && rejTodoHtml.includes("已驳回"), "Rejected status missing on personal task card");
+    assert.ok(rejTodoHtml.includes("is-rejected") && rejTodoHtml.includes("已忽略"), "Rejected status missing on personal task card");
     assert.ok(!rejTodoHtml.includes('data-inline-review="reject_fact"'), "Duplicate reject button remained on rejected card");
 
     // XSS & attribute escaping
@@ -624,7 +624,7 @@ async function main() {
     vm.runInContext('state.lens = "personal"; state.member = "bob"; render();', h.context);
     const treeHtml = h.element("thinking-line-canvas").innerHTML;
     assert.ok(treeHtml.includes("☐") && !treeHtml.includes("☑") && !treeHtml.includes("leaf-done"), "Accepted pending child in Thinking Tree falsely marked completed");
-    assert.ok(treeHtml.includes("团队共识"), "Thinking Tree branch did not inherit accepted status from resolveFactStatus");
+    assert.ok(treeHtml.includes("已确认"), "Thinking Tree branch did not inherit accepted status from resolveFactStatus");
     assert.ok(treeHtml.includes('class="thinking-leaf " role="button" tabindex="0" data-fact-id="task-b"'), "Interactive Thinking Tree leaf missing role=button/tabindex=0");
     assert.ok(treeHtml.includes('class="thinking-branch-node" role="button" tabindex="0" data-fact-id="dec-b"'), "Interactive Thinking Tree branch missing role=button/tabindex=0");
     assert.ok(treeHtml.includes('class="thinking-root proposed" role="button" tabindex="0" data-fact-id="goal-b"'), "Interactive Thinking Tree root missing role=button/tabindex=0");
@@ -635,7 +635,7 @@ async function main() {
     assert.ok(factListHtml.includes('<div class="fact-card" role="button" tabindex="0"') && !factListHtml.includes('<button'), "fact-card nested button inside button");
 
     vm.runInContext('state.data.personal.bob.facts[0].status = "rejected"; render();', h.context);
-    assert.equal(h.element("goal-status").textContent, "已驳回");
+    assert.equal(h.element("goal-status").textContent, "已忽略");
     assert.ok(h.goalSurface.classList.contains("is-rejected"), "Rejected North Star goal missing .is-rejected class");
     assert.ok(!h.goalSurface.classList.contains("is-proposed"), "Rejected North Star goal still carried .is-proposed");
   }
@@ -674,8 +674,9 @@ async function main() {
     inlineAccept.onclick({ stopPropagation() {}, preventDefault() {} });
     await h.flush();
     assert.equal(h.requests.filter((r) => r.url === "/api/review").length, 0, "Blank reviewer still posted /api/review");
-    assert.equal(h.element("evidence-drawer").hidden, false, "Blank reviewer did not open guidance drawer");
-    vm.runInContext("closeDrawer();", h.context);
+    assert.equal(h.element("compass-toast").hidden, false, "Blank reviewer did not show toast warning");
+    assert.ok(h.element("compass-toast").textContent.includes("请先填写负责人姓名"), "Blank reviewer toast missing reviewer guidance");
+    assert.equal(h.element("evidence-drawer").hidden, true, "Blank reviewer unexpectedly opened interrupting drawer");
 
     vm.runInContext('state.lens = "team"; document.getElementById("reviewer-input").value = "Alice"; render(); openFact("task-b");', h.context);
     const confirmSupportBtn = h.element("drawer-body")._getParsed().reviewBtns[0];
@@ -980,12 +981,12 @@ async function main() {
     assert.equal(vm.runInContext("effectiveWorkMode()", h.context), "solo", "Single-member workspace did not default to solo mode");
     assert.equal(h.element("session-presence-bar").hidden, true, "Solo mode did not hide multi-member presence bar");
     assert.equal(h.element("member-picker").hidden, true, "Solo mode did not hide member picker");
-    assert.equal(h.element("lens-personal-btn").textContent, "实时纪要 · 待定思路");
-    assert.equal(h.element("lens-team-btn").textContent, "已定案基准");
+    assert.equal(h.element("lens-personal-btn").textContent, "实时纪要 · 待确认想法");
+    assert.equal(h.element("lens-team-btn").textContent, "已确认事项");
 
     // Solo mode allows committing directly from personal drawer without switching to team lens
     vm.runInContext('openFact("d1");', h.context);
-    assert.ok(h.element("drawer-body").innerHTML.includes("定案为项目基准"), "Solo personal drawer missing baseline commit button");
+    assert.ok(h.element("drawer-body").innerHTML.includes("✓ 确认"), "Solo personal drawer missing confirm button");
 
     // Reviewer signature input is persisted to localStorage and restored cleanly on reload
     h.element("reviewer-input").oninput({ target: { value: "Fang" } });
@@ -996,7 +997,7 @@ async function main() {
     assert.equal(vm.runInContext("effectiveWorkMode()", h.context), "team");
     assert.equal(store.get("compass_work_mode"), "team");
     assert.equal(h.element("session-presence-bar").hidden, false, "Team mode did not restore presence bar");
-    assert.equal(h.element("lens-team-btn").textContent, "团队共识");
+    assert.equal(h.element("lens-team-btn").textContent, "已确认事项");
 
     // Verify localStorage restores remembered signature on fresh boot when readOnly is false
     const hReload = buildTestHarness({ initialFetch: true, state: soloState, localStorage: localStorageMock });

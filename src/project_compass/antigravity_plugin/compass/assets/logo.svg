@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- 暖白现代底色 -->
+    <linearGradient id="lightBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F4F4F6"/>
+    </linearGradient>
+
+    <!-- 日出荧光橘渐变 (Electric Orange) -->
+    <linearGradient id="orangeNeedle" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#EA580C"/>
+      <stop offset="60%" stop-color="#FF5500"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+
+    <!-- 阳光柠檬黄 (Lemon Yellow) -->
+    <linearGradient id="yellowCone" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="100%" stop-color="#EAB308"/>
+    </linearGradient>
+
+    <!-- 朱砂红真理印鉴渐变 (Vermilion Seal) -->
+    <radialGradient id="vermilionSeal" cx="45%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="50%" stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#991B1B"/>
+    </radialGradient>
+
+    <!-- 瑞士新野兽派硬质阴影 (Neo-Brutalist Pure Shadow) -->
+    <filter id="brutalistShadow" x="-15%" y="-15%" width="135%" height="135%">
+      <feDropShadow dx="8" dy="8" stdDeviation="0" flood-color="#18181B" flood-opacity="1"/>
+    </filter>
+
+    <filter id="sealShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#7F1D1D" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 纯净暖白背景 -->
+  <rect width="800" height="800" fill="url(#lightBg)"/>
+
+  <!-- 2. 瑞士国际主义工程网格与参考线 (极其克制、洗练) -->
+  <g stroke="#E4E4E7" stroke-width="1.5">
+    <line x1="80" y1="380" x2="720" y2="380"/>
+    <line x1="400" y1="80" x2="400" y2="680"/>
+    <!-- 45度辅助聚焦虚线 -->
+    <line x1="220" y1="200" x2="580" y2="560" stroke-dasharray="4 6"/>
+    <line x1="580" y1="200" x2="220" y2="560" stroke-dasharray="4 6"/>
+  </g>
+
+  <!-- 3. 核心包豪斯色盘组件 (带硬投影) -->
+  <g filter="url(#brutalistShadow)">
+    
+    <!-- 底盘：深曜石黑圆盘 (直径 380px) -->
+    <circle cx="400" cy="380" r="190" fill="#18181B" stroke="#18181B" stroke-width="4"/>
+
+    <!-- 1/2 纯净象牙白半圆切块 (西半球：代表人类规范与既有事实基底) -->
+    <path d="M 400 380 L 210 380 A 190 190 0 0 1 400 190 Z" fill="#FAFAFA"/>
+    <path d="M 400 380 L 210 380 A 190 190 0 0 0 400 570 Z" fill="#F4F4F5"/>
+
+    <!-- 1/4 阳光柠檬黄扇区 (东北象限：代表注意力集中与证据聚焦视锥 FOCUS SECTOR) -->
+    <path d="M 400 380 L 400 190 A 190 190 0 0 1 590 380 Z" fill="url(#yellowCone)"/>
+    
+    <!-- 聚焦扇区内部的微雷达刻度线 (象征 0.15s 瞬间聚焦取证) -->
+    <path d="M 400 380 L 400 280 A 100 100 0 0 1 500 380 Z" fill="none" stroke="#18181B" stroke-width="2" stroke-dasharray="3 5"/>
+    <circle cx="470" cy="310" r="4" fill="#18181B"/> <!-- 聚焦数据点 -->
+    <text x="510" y="275" font-family="'Geist Mono', monospace" font-size="10" font-weight="700" fill="#18181B" opacity="0.8">0.15s</text>
+  </g>
+
+  <!-- 4. 罗盘微米刻度与代码内生标记 (Native Code Markers) -->
+  <g stroke="#18181B" stroke-linecap="round">
+    <!-- 正北标尺 (N) -->
+    <line x1="400" y1="120" x2="400" y2="155" stroke-width="4"/>
+    <text x="400" y="105" text-anchor="middle" font-family="'Inter', sans-serif" font-size="16" font-weight="900" fill="#18181B">N</text>
+    
+    <!-- 东 (E)、南 (S)、西 (W) 精密短标尺 -->
+    <line x1="645" y1="380" x2="620" y2="380" stroke-width="3"/>
+    <text x="665" y="385" text-anchor="middle" font-family="'Geist Mono', monospace" font-size="12" font-weight="700" fill="#71717A">E</text>
+
+    <line x1="400" y1="640" x2="400" y2="615" stroke-width="3"/>
+    <text x="400" y="665" text-anchor="middle" font-family="'Geist Mono', monospace" font-size="12" font-weight="700" fill="#71717A">S</text>
+
+    <line x1="155" y1="380" x2="180" y2="380" stroke-width="3"/>
+    <text x="135" y="385" text-anchor="middle" font-family="'Geist Mono', monospace" font-size="12" font-weight="700" fill="#71717A">W</text>
+  </g>
+
+  <!-- 5. 【指南核心】包豪斯立体粗几何双色真北指针 (True North Pointer) -->
+  <g>
+    <!-- 北针左切面：高亮日出荧光橘 -->
+    <polygon points="400,140 365,380 400,345" fill="url(#orangeNeedle)" stroke="#18181B" stroke-width="3"/>
+    <!-- 北针右切面：深沉暗橙 (塑造光影立体感) -->
+    <polygon points="400,140 400,345 435,380" fill="#EA580C" stroke="#18181B" stroke-width="3"/>
+
+    <!-- 南针稳定块：纯白与灰阶配重 -->
+    <polygon points="400,500 375,380 400,400" fill="#FFFFFF" stroke="#18181B" stroke-width="3"/>
+    <polygon points="400,500 400,400 425,380" fill="#D4D4D8" stroke="#18181B" stroke-width="3"/>
+  </g>
+
+  <!-- 6. 【点睛之笔：融合风格1的朱砂火漆真理印 (The Vermilion Seal ✦)】 -->
+  <!-- 轴心不再是普通黑圈，而是一枚沉甸甸、象征团队真理确证的朱砂红印泥徽章 -->
+  <g filter="url(#sealShadow)">
+    <!-- 外层深曜石黑基座环 -->
+    <circle cx="400" cy="380" r="34" fill="#18181B" stroke="#FAFAFA" stroke-width="4"/>
+    
+    <!-- 内部朱砂红火漆印实心圆 (直径 46px) -->
+    <circle cx="400" cy="380" r="23" fill="url(#vermilionSeal)"/>
+    
+    <!-- 印章内部的纯白真理星芒与代码十字 `✦` -->
+    <text x="400" y="387" text-anchor="middle" font-family="'Inter', serif" font-size="20" font-weight="800" fill="#FFFFFF">✦</text>
+  </g>
+
+  <!-- 7. 底部精修包豪斯品牌排版 -->
+  <text x="400" y="720" 
+        text-anchor="middle" 
+        font-family="'Inter', -apple-system, sans-serif" 
+        font-size="32" 
+        font-weight="900" 
+        letter-spacing="6" 
+        fill="#18181B">COMPASS</text>
+        
+  <text x="400" y="750" 
+        text-anchor="middle" 
+        font-family="'Geist Mono', monospace" 
+        font-size="12" 
+        font-weight="700" 
+        letter-spacing="4" 
+        fill="#FF5500">THE LIVING EVIDENCE COMPASS FOR CODING AGENTS</text>
+</svg>
