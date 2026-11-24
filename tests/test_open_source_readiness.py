@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
-import tomllib
 import unittest
 from unittest.mock import patch
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 stdlib has no tomllib
+    tomllib = None
 
 from project_compass import __version__, mcp_server
 from project_compass.code_index import build_code_index, iter_python_files
@@ -47,8 +53,16 @@ class OpenSourceReadinessTests(unittest.TestCase):
         self.assertIn("Version 2.0", license_text)
 
         pyproject_text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        pyproject_data = tomllib.loads(pyproject_text)
-        pkg_globs = pyproject_data["tool"]["setuptools"]["package-data"]["project_compass"]
+        if tomllib is not None:
+            pyproject_data = tomllib.loads(pyproject_text)
+            pkg_globs = pyproject_data["tool"]["setuptools"]["package-data"]["project_compass"]
+        else:
+            match = re.search(
+                r"\[tool\.setuptools\.package-data\][\s\S]*?project_compass\s*=\s*(\[[\s\S]*?\])",
+                pyproject_text,
+            )
+            self.assertIsNotNone(match, "missing [tool.setuptools.package-data] project_compass list")
+            pkg_globs = ast.literal_eval(match.group(1))
         self.assertIn('requires = ["setuptools>=68"]', pyproject_text)
         self.assertIn('license = {text = "Apache-2.0"}', pyproject_text)
         self.assertIn('dependencies = []', pyproject_text)
