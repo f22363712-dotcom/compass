@@ -1,0 +1,12 @@
+{
+  "name": "compass",
+  "displayName": "Compass",
+  "version": "1.6.1",
+  "description": "Real-time AI development control center: orthogonal mindmap, dual anchors, split conflict adjudication, and evidence-backed workspace state.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "/compass 打开项目掌控台，查看核心目标、待确认想法与思维导图",
+    "最近完成的工作是什么？当前下一步还有哪些待核对依据？",
+    "把当前讨论的想法或待办随手记下来，并生成简洁短标题"
+  ]
+}

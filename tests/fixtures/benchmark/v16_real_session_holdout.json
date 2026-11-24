@@ -1,0 +1,192 @@
+{
+  "format": "project-compass-v16-real-holdout",
+  "version": 1,
+  "description": "Unmodified (only local-path sanitized) real multi-turn conversation holdout slice containing genuine architectural decisions/exclusions alongside real questions, deictic approvals, UI-badge quotes, and markdown diagnostic headings.",
+  "project_meta": {
+    "project_name": "CompassHoldout",
+    "author": "fang",
+    "session_id": "holdout-real-session-01"
+  },
+  "transcript_records": [
+    {
+      "step_index": 634,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-15T15:54:18Z",
+      "content": "Created At: 2026-11-15T23:54:18+08:00\nCompleted At: 2026-11-16T00:01:25+08:00\nCreated At: 2026-11-15T23:54:18+08:00\nCompleted At: 2026-11-16T00:01:24+08:00\nA1: 1和2"
+    },
+    {
+      "step_index": 665,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-16T02:29:54Z",
+      "content": "Created At: 2026-11-16T10:29:54+08:00\nCompleted At: 2026-11-16T12:08:09+08:00\nCreated At: 2026-11-16T10:29:54+08:00\nCompleted At: 2026-11-16T12:08:09+08:00\nA1: (Recommended) 新老分流 + 历史折叠：0→1 新项目开局只有一颗干净的目标锚点，随对话用“15~20 字人话短标题”一根根长出分支（原文细节全收进侧边抽屉）；半路接老仓库时，旧文档扫出来的历史记录自动洗掉日期与代码符号，默认折叠收进一个「历史文档参考（N 条）」胶囊里，绝不霸占主脑图树干"
+    },
+    {
+      "step_index": 1006,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-16T06:50:29Z",
+      "content": "Created At: 2026-11-16T14:50:29+08:00\nCompleted At: 2026-11-16T15:24:00+08:00\nCreated At: 2026-11-16T14:50:29+08:00\nCompleted At: 2026-11-16T15:24:00+08:00\nA1: (Recommended) 统一开放接口：同时兼容「用户自配云端 API（如 DeepSeek 等）」与「本机免费模型（如 Ollama）」，安装包保持零体积负担\nA2: (Recommended) 一框两用：首屏同一个输入框既能随手敲词搜全文，也能直接提问拿结论"
+    },
+    {
+      "step_index": 1426,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-16T09:29:21Z",
+      "content": "<USER_REQUEST>\n我们接下来的一步是围绕测评来让测评分数更高吗？（这样就够了吗？还是我去？还是你还需要把其他可能没有被量化的维度也要做迭代？还有我们可能也需要设置一个迭代的边界）\n\n你可以看看 MiniMax，它还有其他的模型。我觉得你可以测试 M3.1 flash 模型，我现在再给你配置一个 DeepSeek 的api<LOCAL_PATH> Api.md，你可以尝试对比不同的模型，看它是不是会对上面的跑分——也就是安全性、精准度、检索命中率、回答准确率这些——有所影响？\n还有实际的交互体验也肯定需要做迭代，比如我在这里搜：当前的目标是什么？接下来做什么？实际给我的呈现是先罗列了一大堆证据，最后我需要往下看，才有语义归纳。然后我找了半天，也没有找到下一步要做什么\n\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-16T17:29:21+08:00.\n\nThe user's current state is as follows:\nActive Document: user is viewing tab agent-tab-32 (http://127.0.0.1:8787/, \"Compass · AI 开发实时纪要与项目掌控台\") (LANGUAGE_UNSPECIFIED)\n</ADDITIONAL_METADATA>"
+    },
+    {
+      "step_index": 2484,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-19T10:05:41Z",
+      "content": "<USER_REQUEST>\n@[Quote] 这些要怎么样实现呢？对这个的实际的技术细节，你有方案吗？可以看看已有的一些项目或者产品，他们是怎么样实现这一点的。我们做借鉴，他们有成熟的方案，我们就直接学就行了\n@[Quote] 这里需要改这个模板，别因为我做这个漫剧你就加上去，你就做通用的就行\n@[Quote] 加上我上面说的，准备开干吧 /run-workflow  /goal \n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-19T18:05:41+08:00.\n\nThe user has mentioned some items in the form @[ITEM]. Here is extra information about the items that were mentioned by the user, in the order that they appear:\n\n@[Quote] is a [Text Block]:\n默认主动作「仅拍板定案」：只把方案锁入项目正式基准、拦住后续跑偏，绝不打断左栏当前对话；\n稳妥派活动作「带入输入框推进」（主推）：锁定定案的同时，把这条定案连同原文证据编号做成一枚待发引用胶囊挂进左栏输入框上方——不擅自替您按回车，您既可直接回车开干，也能补半句“先只改第一集”再发；\n一键直派动作「立即在当前窗口 / 新开独立窗口执行」：下拉小菜单可选直接发进当前左栏对话立刻动手，或者在同项目下干净拉起一个全新平行窗口专办此事（不污染当前聊天）；\n外部普通浏览器兜底：如果在独立浏览器网页里点推进（受系统隔离不能跨软件往聊天框塞字），则自动将该项置顶进「优先待办施工队列」并复制好带证据编号的施工指令，左栏任何窗口下次对齐上下文即可自动领走。\n@[Quote] is a [Text Block]:\nAI 漫剧 / 内容制片组：总导演（负责人） + 剧本设定席 + 分镜视觉席 + 精剪验收席\n@[Quote] is a [Text Block]:\n确认最后一个细节即可立即开干（先推 1.4.0 上远端，随后跑通完整并行工作流交付）\n/run-workflow is a [Slash Command]:\n<SKILL>The user requested you read and use the \"run-workflow\" skill. The path to the skill file is:\n<LOCAL_PATH></SKILL>\n/goal is a [Slash Command]:\nThe user has marked this task with /goal, indicating that this task is intended to run for a long time without user input, e.g. overnight. You should be extra thorough and only stop when you are confident the goal has been completely fulfilled. The system will force you to continue execution, prompting you to audit your work until completion. Once complete, include <!-- GOAL_COMPLETE --> in your response. If the user explicitly asked to stop or cancel this goal, include <!-- GOAL_CANCELLED --> in your response to cancel the goal.\n</ADDITIONAL_METADATA>"
+    },
+    {
+      "step_index": 2619,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-19T12:48:30Z",
+      "content": "<USER_REQUEST>\n/goal /run-workflow @[Quote] 查看这个问题，你看我们之前说，是一直在为看板是怎么样的、它呈现的效果怎么样来做服务的，结果你现在跟我说你调取不了看板所以你需要做详细的调研和检查，然后查看我们应该如何实现原来想给用户提供的服务@[Quote] 这两种哪种更好更轻便,我们原本的计划就是在后台启动本地网页服务，对吧？但是是在右侧浏览器打开\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-19T20:48:30+08:00.\n\nThe user's current state is as follows:\nActive Document: user is viewing tab browser__1795092052702_1 (http://127.0.0.1:8787/, \"\") (LANGUAGE_UNSPECIFIED)\n\nThe user has mentioned some items in the form @[ITEM]. Here is extra information about the items that were mentioned by the user, in the order that they appear:\n\n/goal is a [Slash Command]:\nThe user has marked this task with /goal, indicating that this task is intended to run for a long time without user input, e.g. overnight. You should be extra thorough and only stop when you are confident the goal has been completely fulfilled. The system will force you to continue execution, prompting you to audit your work until completion. Once complete, include <!-- GOAL_COMPLETE --> in your response. If the user explicitly asked to stop or cancel this goal, include <!-- GOAL_CANCELLED --> in your response to cancel the goal.\n/run-workflow is a [Slash Command]:\n<SKILL>The user requested you read and use the \"run-workflow\" skill. The path to the skill file is:\n<LOCAL_PATH></SKILL>\n@[Quote] is a [Text Block]:\n按需工具通道与右侧副栏面板的机制差异（根本原因）\n刚才执行 /compass 走的是零配置本地工具通道：它只在对话调用那一瞬间读取一次本地项目账本、把文字纪要传回聊天框，用完即退，不会自动在后台常驻占用 8787 端口启动网页服务器。\n另外也要如实说明一个宿主差异：虽然我们已经给工具配好了内嵌互动界面（在支持该扩展协议的客户端里能直接弹出），但 Antigravity 2.0 桌面端目前只把普通工具服务当作纯数据接口，不会在调用工具时自动往右侧副栏弹出自定义网页。在 Antigravity 2.0 里要在右侧常驻看可视化看板，要么后台启动本地网页服务用右侧内置浏览器打开，要么按 Antigravity 原生副栏规范封装成常驻侧边栏面板插件（支持在聊天里生成一键展开面板的胶囊按钮）。\n@[Quote] is a [Text Block]:\n在 Antigravity 2.0 里要在右侧常驻看可视化看板，要么后台启动本地网页服务用右侧内置浏览器打开，要么按 Antigravity 原生副栏规范封装成常驻侧边栏面板插件（支持在聊天里生成一键展开面板的胶囊按钮）。\n</ADDITIONAL_METADATA>"
+    },
+    {
+      "step_index": 2694,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-19T14:42:11Z",
+      "content": "Created At: 2026-11-19T22:42:11+08:00\nCompleted At: 2026-11-19T22:43:44+08:00\nCreated At: 2026-11-19T22:42:11+08:00\nCompleted At: 2026-11-19T22:43:43+08:00\nA1: (Recommended) 批准该四档全兼容方案，立即通过并行工作流落地开发并做全量实测验收"
+    },
+    {
+      "step_index": 3279,
+      "source": "MODEL",
+      "type": "PLANNER_RESPONSE",
+      "created_at": "2026-11-19T16:21:52Z",
+      "content": "我刚直接检查了你本机正在运行的副栏后台进程和页面样式现场，定位到了两个确切病根：\n\n1. **一直卡在「正在同步工作区」的原因（慢接口引发排队雪崩）**\n   后台服务其实已经启动，但本机实测发现里面堵了 **65 个排队等待的请求线程**：首次读取代码结构索引时，对两千多个节点逐个重复做系统磁盘路径核验花掉了约 **4.1 秒**，加上每次状态刷新都会重新遍历全仓库代码比对文件指纹又花掉约 **1 秒**，叠加副栏启动时重复触发了一次同目录切区请求，总耗时刚巧撞上前端 **8 秒超时线**。前端超时断开后立刻发起三次重试和定时轮询，而服务端旧请求仍在锁里排队计算，最终把通道彻底堵死，页面一直停留在初始占位文案。\n2. **截图黑底黑字、右上角状态框空白的原因（深色宿主行内样式撞色）**\n   你的编辑器当前处于深色外观，副栏容器自动注入的桥接脚本会往页面根节点强行写入行内纯黑底色，并覆盖同名的次要文字颜色配置：结果看板原本为浅色纸面设计的深色大标题直接贴在了纯黑背景上，而右上角白色状态框里的文字又被改成了浅色，形成「黑底黑字 + 白底白字」的双重隐身。\n\n---\n\n### 四维修复方案（待你确认后动工）\n\n1. **① 界面怎么改**\n   - 彻底隔离宿主桥接脚本写入的行内底色与同名颜色项，恢复标题区、搜索追问区、工具栏和右上角连接状态框的清晰高对比显示（可根据你在下方选择的偏好，固定保持清爽米白纸面主题，或同步支持深色随动主题）。\n   - 页面打开后在百毫秒内直接呈现出完整项目标题、证据条数、核心目标与脑图/台账内容，不再长时间停在同步占位框。\n\n2. **② 背后采取什么思路改对应模块**\n   - **样式隔离**：将看板自身的一套颜色与字体配置独立命名并绑定在看板容器层级，显式\n<truncated 157 bytes>\n径按去重后的文件集合一次性核验（将 4.1 秒压到几十毫秒内）；对未发生数据变化的看板状态直接复用内存快照，不再每次轮询都扫盘重算代码指纹；副栏初始化发现当前已是同一项目目录时直接跳过重复激活。\n   - **防排队雪崩保护**：在后台扫描或重算期间，状态读取优先无阻塞返回最新可用快照，前端轮询严格保持上一轮未返回前不叠发新请求，彻底根除线程积压。\n\n3. **③ 最容易出问题的边界在哪及如何界定处理**\n   - **外部改文档或对话新记账时的实时性边界**：如果只读内存缓存，可能漏掉命令行或左侧对话刚写入的新记录；因此每次读取前只做毫秒级的文件修改时间与大小比对，一旦发现账本或文档真有变动立即增量刷新，没变动才直接走内存快照。\n   - **真正在左侧切换不同项目时的隔离边界**：只有当工作区路径规范化后确实与当前已加载项目一致时才跳过激活；一旦切换到新项目文件夹，立即清空旧缓存并加载新项目状态。\n   - **旧卡死进程清理边界**：更新已安装的副栏插件后，需一并结束当前已积压 65 个线程的旧后台子进程，让右侧面板重连到干净的新服务。\n\n4. **④ 最后做什么验收与量化对比测评**\n   - **同机耗时实测对比**：实测记录本仓库改前（首次结构加载约 4.1 秒、状态接口单次约 1.0 至 1.9 秒、并发重入超时堵死）与改后（首次加载耗时、连续热轮询耗时、连发 20 次并发状态请求零超时零积压）的真实毫秒数据。\n   - **深色宿主样式实景核验**：模拟深色宿主注入纯黑背景与同名浅色变量的真实场景，验证主标题、证据条数、右上角状态框及检索区对比度全部清晰可读，并重跑全套前后端回归门禁后再交付。\n\n请确认下方的界面外观偏好并批准方案，确认后我立即开始修改并为你刷新本机副栏："
+    },
+    {
+      "step_index": 3280,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-19T16:23:25Z",
+      "content": "Created At: 2026-11-20T00:23:25+08:00\nCompleted At: 2026-11-20T00:25:21+08:00\nCreated At: 2026-11-20T00:23:25+08:00\nCompleted At: 2026-11-20T00:25:21+08:00\nA1: (Recommended) 批准动工 · 保持清爽米白纸面高对比主题（彻底屏蔽深色编辑器撞色覆盖，最稳妥清晰）"
+    },
+    {
+      "step_index": 3426,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-20T02:05:48Z",
+      "content": "<USER_REQUEST>\n你现在可以用 Claude 的模型来做一下审查。我能想到的要做的审查包括：\n1. 识别的准确性和效率\n2. 识别内容的丰富性（不仅包括我们的决策，还包括我们未决策的项目，基于什么样的前提）\n3. 主动提示的能力（是否能够作为一个参谋军师的作用，一个丞相位置）\n还有什么要做审查的吗记住，你只做审查，别执行，保留额度\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-20T10:05:48+08:00.\n</ADDITIONAL_METADATA>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from Orchestrator (Carbon) to Claude Opus 5.5 (Medium). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.\n</USER_SETTINGS_CHANGE>"
+    },
+    {
+      "step_index": 3432,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-20T02:13:32Z",
+      "content": "<USER_REQUEST>\n肯定是三项都要做的，但是我们该采用什么样的技术路线来做呢？什么语言？什么框架？最适合我们当前项目的路径是什么？是否有其他项目的参考\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-20T10:13:32+08:00.\n</ADDITIONAL_METADATA>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from Claude Opus 5.5 (Medium) to Orchestrator (Carbon). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.\n</USER_SETTINGS_CHANGE>"
+    },
+    {
+      "step_index": 3457,
+      "source": "MODEL",
+      "type": "PLANNER_RESPONSE",
+      "created_at": "2026-11-20T02:21:47Z",
+      "content": "### 一、语言、框架与最适合当前项目的技术路线\n\n结合项目架构规范（见 [AGENTS.md](<LOCAL_URI>)、[PRODUCT_FORM_AND_TECH_STACK.md](<LOCAL_URI>) 与 [DECISIONS.md](<LOCAL_URI>)）以及上轮体检暴露的真因（见 [COMPASS_REVIEW_2026-11-20.md](<LOCAL_URI>)），**最适合的路径不是推翻重写或引入重型第三方框架，而是完全沿用现有技术栈，在原有骨架上做「双通道被动采集 + 轻量决策关系图 + 双轨参谋引擎」升级**：\n\n1. **开发语言**：继续使用 **Python 3.10 及以上版本**（后端引擎、采集监听、参谋推理与评测基准）配合 **原生现代 JavaScript 与 CSS**（前端工作台与思维脑图画布），右栏宿主桥接保持现有的轻量 Node 脚本不变。\n2. **框架选择**：坚持 **零第三方运行时框架依赖**（纯 Python 标准库 + 原生无构建前端 + 标准兼容的模型接口调用）。**不引入** LangChain、LlamaIndex、React 构建链、Neo4j 图数据库或外部向量数据库。\n3. **为什么这是最契合当前项目的路径**：\n   - **底座其实已经备好了一半，痛点在「没接通」和「缺关系」而非语言性能**：仓库里原本就已经写好了按字节游标增量读取本地对话日志的监听器、多模型接口连接器，以及五层自动化评测框架（见 [EVAL_FRAMEWORK.md](<LOCAL_URI>)）。之前表现拉胯，是因为右栏后台没有把对话自动监听挂上去、旧计划文档没有做完工与时效过滤、数据结构里缺少「备选方案—依赖前提—否决原因」的关联链条。\n   - **保住开箱即用的核心竞争力**：零外部依赖让任何开发者克隆下来三分钟就能跑通，离线演\n<truncated 7639 bytes>\n忽略的同类提示在当前证据未变化前不再重复弹出。\n- **隐私与内部思考隔离边界**：后台读取本地会话日志时，严格跳过模型的隐藏内部推理字段、环境变量与密钥文本，只记录公开可见的用户输入、明确结论与命令结果摘要。\n\n#### ④ 最后做什么验收与量化对比测评\n全部三项改造都会保留当前的 v1.5 版本作为对照基线，跑出改前与改后的同题量化成绩单并附带真实界面走查：\n1. **采集链路开闭对照实验**：用同一段包含目标切换、方案权衡与代码修改的真实多轮会话回放，对比「旧版仅靠被动工具调用 + 静态文档扫描」与「新版开启双通道增量采集 + 历史降噪」的决策捕获率、下一步识别时效（从滞后旧版本到秒级对齐最新进展）以及待办噪音下降幅度（目标把静态旧文档误报率压降 85% 以上，单条记录假冲突率降至 0）。\n2. **标准答案盲测实验**：整理 15 至 20 个脱敏真实开发里程碑（人工标好当时的已定决策、未决备选方案、隐含前提与已淘汰路径作为标准答案），同台对比「旧版基线」「新版纯本地规则模式」「新版接入大模型增强模式」的准确率、召回率与前提挂接完整度。\n3. **参谋军师盲评实验**：构造典型关键现场（如前提未验就动工、重提已否决方案、目标锚点过期、二选一架构分叉），隐去新旧版本标签，交由隔离上下文的独立评审模型按「有用性、事实依据准确度、时机恰当度、低打扰度」四个维度打分（满分 10 分），并在右栏实景截图核验展示效果，最后通过全量自动化测试门禁。\n\n---\n\n> 说明：待你在下方确认技术路线细节与推进方式后，我会第一时间把这份完整的技术选型、开源项目对标与四维实施方案生成正式的 Markdown 文档存入工作区文档目录，并按你的指示执行。请先确认以下两个关键取舍："
+    },
+    {
+      "step_index": 3458,
+      "source": "MODEL",
+      "type": "GENERIC",
+      "created_at": "2026-11-20T02:23:25Z",
+      "content": "Created At: 2026-11-20T10:23:25+08:00\nCompleted At: 2026-11-20T10:26:06+08:00\nCreated At: 2026-11-20T10:23:25+08:00\nCompleted At: 2026-11-20T10:26:06+08:00\nA1: (Recommended) 零依赖 Python 与原生网页底座 +「本地高精度规则 + 可插拔大模型增强」双轨混合（无密钥可离线跑通，接上模型自动升级隐含前提提炼与深度参谋）\nA2: 选择 1 推荐的这个 1。同时我觉得你可以在右侧开一个 Geng，让他深度调研一下已有的这 6 个陈述方案，仔细拆解它们的功能和技术，看看我们究竟有哪些需要详细吸收的，我们怎么样才能走？我们怎么走出我们不一样的路"
+    },
+    {
+      "step_index": 3843,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "created_at": "2026-11-20T06:56:26Z",
+      "content": "<USER_REQUEST>\n让Claude再做一个审查呢，包括当前的：\n1. 准确性\n2. 效率\n3. 模型消耗\n4. 可视化\n5. 用户交互体验\n6. 理解程度\n7. 文案理解的简易程度\n8. 实际功能  \n/pbr-code-review  \n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-20T14:56:26+08:00.\n\nThe user's current state is as follows:\nActive Document: user is viewing tab agent-tab-8 (http://127.0.0.1:18788/, \"Compass · AI 开发实时纪要与项目掌控台\") (LANGUAGE_UNSPECIFIED)\n\nThe user has mentioned some items in the form @[ITEM]. Here is extra information about the items that were mentioned by the user, in the order that they appear:\n\n/pbr-code-review is a [Slash Command]:\n<SKILL>The user requested you read and use the \"pbr-code-review\" skill. The path to the skill file is:\n<LOCAL_PATH></SKILL>\n</ADDITIONAL_METADATA>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from Orchestrator (Carbon) to Claude Opus 5.5 (Medium). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.\n</USER_SETTINGS_CHANGE>"
+    }
+  ],
+  "gold_items": [
+    {
+      "id": "RH01",
+      "step_index": 665,
+      "stage": "settled",
+      "gold_quote": "新老分流 + 历史折叠：0→1 新项目开局只有一颗干净的目标锚点，随对话用“15~20 字人话短标题”一根根长出分支（原文细节全收进侧边抽屉）；半路接老仓库时，旧文档扫出来的历史记录自动洗掉日期与代码符号，默认折叠收进一个「历史文档参考（N 条）」胶囊里，绝不霸占主脑图树干",
+      "keywords": [
+        "新老分流",
+        "历史折叠"
+      ]
+    },
+    {
+      "id": "RH02",
+      "step_index": 1006,
+      "stage": "settled",
+      "gold_quote": "统一开放接口：同时兼容「用户自配云端 API（如 DeepSeek 等）」与「本机免费模型（如 Ollama）」，安装包保持零体积负担",
+      "keywords": [
+        "统一开放接口",
+        "Ollama"
+      ]
+    },
+    {
+      "id": "RH03",
+      "step_index": 1006,
+      "stage": "settled",
+      "gold_quote": "一框两用：首屏同一个输入框既能随手敲词搜全文，也能直接提问拿结论",
+      "keywords": [
+        "一框两用",
+        "搜全文"
+      ]
+    },
+    {
+      "id": "RH04",
+      "step_index": 2484,
+      "stage": "settled",
+      "gold_quote": "这里需要改这个模板，别因为我做这个漫剧你就加上去，你就做通用的就行",
+      "keywords": [
+        "别因为",
+        "做通用的就行"
+      ]
+    },
+    {
+      "id": "RH05",
+      "step_index": 3280,
+      "stage": "settled",
+      "gold_quote": "批准动工 · 保持清爽米白纸面高对比主题（彻底屏蔽深色编辑器撞色覆盖，最稳妥清晰）",
+      "keywords": [
+        "米白纸面",
+        "高对比主题"
+      ]
+    },
+    {
+      "id": "RH06",
+      "step_index": 3457,
+      "stage": "rejected_path",
+      "gold_quote": "**不引入** LangChain、LlamaIndex、React 构建链、Neo4j 图数据库或外部向量数据库。",
+      "keywords": [
+        "不引入",
+        "LangChain"
+      ]
+    },
+    {
+      "id": "RH07",
+      "step_index": 3458,
+      "stage": "settled",
+      "gold_quote": "零依赖 Python 与原生网页底座 +「本地高精度规则 + 可插拔大模型增强」双轨混合（无密钥可离线跑通，接上模型自动升级隐含前提提炼与深度参谋）",
+      "keywords": [
+        "零依赖 Python",
+        "双轨混合"
+      ]
+    }
+  ],
+  "noise_steps_expect_zero": [
+    634,
+    1426,
+    2619,
+    2694,
+    3279,
+    3426,
+    3432,
+    3843
+  ]
+}

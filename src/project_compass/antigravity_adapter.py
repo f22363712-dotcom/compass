@@ -4,110 +4,43 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import re
 from typing import Any
 
+from .decision_graph import extract_dialogue_rich_facts
 from .evidence_filters import SENSITIVE, is_platform_control, parse_iso_timestamp
 from .models import EvidenceEvent
 
 
 USER_REQUEST_RE = re.compile(r"<USER_REQUEST>(.*?)</USER_REQUEST>", re.DOTALL)
-_GOAL_LINE_RE = re.compile(r"^目标[：:]\s*(\S.+)$")
-_HUMAN_GOAL_RE = re.compile(r"[^。\n]*围绕[^。\n]+打造[^。\n]*")
-_USER_DECISION_RE = re.compile(r"^(?:选项[一二三四1234]|选\s*[A-D])[，,。:\s]\s*\S.+")
-_EXPLICIT_DECISION_RE = re.compile(r"^(?:核心决策|决策)[：:]\s*(\S.+)$")
-_ASSISTANT_TASK_RE = re.compile(r"^(?:已实现|已完成)\s+(?:Module\s+\d+|`?[A-Za-z_][A-Za-z0-9_.-]*`?)[^。\n]*。?")
+_CMD_EXIT_CODE_RE = re.compile(r"Command exited with code\s+(-?\d+)", re.IGNORECASE)
+_ASK_TS_HEADER_RE = re.compile(r"\A(?:(?:Created|Completed)\s+At:\s*[^\n]+\r?\n)+", re.IGNORECASE)
+
+
+def infer_transcript_session_id(path: str | Path) -> str:
+    """Resolve the conversation UUID/session name from Antigravity or legacy log paths."""
+    resolved = Path(os.path.abspath(os.path.expanduser(str(path))))
+    parent = resolved.parent
+    grandparent = parent.parent
+    if parent.name == "logs":
+        if grandparent.name == ".system_generated" and grandparent.parent.name:
+            return grandparent.parent.name
+        if grandparent.name:
+            return grandparent.name
+        return resolved.stem or "antigravity-session"
+    return parent.name or grandparent.name or resolved.stem or "antigravity-session"
 
 
 def _extract_message_facts(content: str, claim_type: str) -> list[dict[str, Any]]:
-    """Extract deterministic, source-bound candidate facts from explicit dialogue lines."""
-    facts: list[dict[str, Any]] = []
-    seen_quotes: set[str] = set()
-
-    for raw_line in content.splitlines():
-        cleaned = re.sub(r"^[>\-\*\s]+", "", raw_line).strip()
-        plain = cleaned.replace("**", "").strip()
-        if not plain or ("<" in plain and ">" in plain):
-            continue
-
-        goal_match = _GOAL_LINE_RE.match(plain)
-        if goal_match:
-            quote = plain
-            if quote not in seen_quotes:
-                seen_quotes.add(quote)
-                facts.append({
-                    "kind": "goal",
-                    "subject_key": f"goal.agy.{_hash_content(quote)}",
-                    "value": quote,
-                    "quote": quote,
-                    "claim_type": claim_type,
-                })
-            continue
-
-        if claim_type == "user_statement":
-            human_goal = _HUMAN_GOAL_RE.search(plain)
-            if human_goal:
-                quote = human_goal.group(0).strip()
-                if quote not in seen_quotes:
-                    seen_quotes.add(quote)
-                    facts.append({
-                        "kind": "goal",
-                        "subject_key": f"goal.agy.{_hash_content(quote)}",
-                        "value": quote,
-                        "quote": quote,
-                        "claim_type": claim_type,
-                    })
-
-            if _USER_DECISION_RE.match(plain) or _EXPLICIT_DECISION_RE.match(plain):
-                quote = plain
-                if quote not in seen_quotes:
-                    seen_quotes.add(quote)
-                    facts.append({
-                        "kind": "decision",
-                        "subject_key": f"decision.agy.{_hash_content(quote)}",
-                        "value": quote,
-                        "quote": quote,
-                        "claim_type": claim_type,
-                    })
-                continue
-
-        if claim_type == "assistant_report":
-            task_match = _ASSISTANT_TASK_RE.match(plain)
-            if task_match:
-                quote = task_match.group(0).strip()
-                if quote not in seen_quotes:
-                    seen_quotes.add(quote)
-                    facts.append({
-                        "kind": "task",
-                        "subject_key": f"task.agy.{_hash_content(quote)}",
-                        "value": quote,
-                        "quote": quote,
-                        "claim_type": claim_type,
-                        "task_state": "reported_complete",
-                    })
-
-    return facts
+    """Extract deterministic, source-bound candidate facts + causal context from dialogue lines."""
+    return extract_dialogue_rich_facts(content, claim_type)
 
 
 class AntigravityTranscriptAdapter:
     """Extract public user messages, assistant reports and optional tool events from an Antigravity transcript."""
-
-    @classmethod
-    def from_transcript(
-        cls,
-        path: str | Path,
-        *,
-        session_id: str | None = None,
-        member_id: str = "antigravity",
-        include_tools: bool = True,
-        max_tool_chars: int = 8000,
-    ) -> list[EvidenceEvent]:
-        transcript_path = Path(path).expanduser().resolve(strict=True)
-        resolved_session = session_id or transcript_path.parent.parent.name
-        resolved_member = member_id.strip() or "antigravity"
-        events: list[EvidenceEvent] = []
 
     @classmethod
     def parse_record(
@@ -119,6 +52,7 @@ class AntigravityTranscriptAdapter:
         include_tools: bool = True,
         max_tool_chars: int = 8000,
         line_number: int = 1,
+        pending_ask_question: bool = False,
     ) -> list[EvidenceEvent]:
         """Parse a single JSON transcript record into zero or more EvidenceEvent objects."""
         events: list[EvidenceEvent] = []
@@ -131,6 +65,7 @@ class AntigravityTranscriptAdapter:
             if timestamp_str
             else datetime.now(timezone.utc)
         )
+        sess_tag = _hash_content(f"{resolved_session}:{resolved_member}")[:6]
 
         if source == "USER_EXPLICIT" and record_type == "USER_INPUT":
             content = record.get("content") or ""
@@ -138,7 +73,7 @@ class AntigravityTranscriptAdapter:
             cleaned_content = match.group(1).strip() if match else content.strip()
             if not cleaned_content or is_platform_control(cleaned_content, kind="user_message") or SENSITIVE.search(cleaned_content):
                 return events
-            event_id = f"agy-u-{step_index}-{_hash_content(cleaned_content)}"
+            event_id = f"agy-u-{sess_tag}-{step_index}-{_hash_content(cleaned_content)}"
             facts = _extract_message_facts(cleaned_content, "user_statement")
             metadata: dict[str, Any] = {
                 "source_ref": f"agy-transcript:{step_index}",
@@ -165,7 +100,7 @@ class AntigravityTranscriptAdapter:
         elif source == "MODEL" and record_type == "PLANNER_RESPONSE":
             content = (record.get("content") or "").strip()
             if content and not is_platform_control(content, kind="assistant_message") and not SENSITIVE.search(content):
-                event_id = f"agy-a-{step_index}-{_hash_content(content)}"
+                event_id = f"agy-a-{sess_tag}-{step_index}-{_hash_content(content)}"
                 facts = _extract_message_facts(content, "assistant_report")
                 metadata = {
                     "source_ref": f"agy-transcript:{step_index}",
@@ -204,7 +139,7 @@ class AntigravityTranscriptAdapter:
                             summary += f": {tool_args['Path']}"
                         if SENSITIVE.search(summary):
                             continue
-                        call_id = f"agy-call-{step_index}-{call_index}"
+                        call_id = f"agy-call-{sess_tag}-{step_index}-{call_index}-{_hash_content(summary)}"
                         events.append(
                             EvidenceEvent(
                                 id=call_id,
@@ -223,11 +158,52 @@ class AntigravityTranscriptAdapter:
                             )
                         )
 
-        elif source == "MODEL" and record_type == "GENERIC" and include_tools:
-            content = (record.get("content") or "").strip()
-            if content and not SENSITIVE.search(content):
-                bounded = content[:max_tool_chars]
-                res_id = f"agy-res-{step_index}-{_hash_content(bounded)}"
+        elif source == "MODEL" and record_type == "GENERIC":
+            raw_content = (record.get("content") or "").strip()
+            ts_match = _ASK_TS_HEADER_RE.match(raw_content)
+            stripped_answer = raw_content[ts_match.end():].strip() if ts_match else raw_content
+            if (ts_match or pending_ask_question) and re.match(r"^A1:\s+\S", stripped_answer):
+                if not SENSITIVE.search(stripped_answer):
+                    facts = _extract_message_facts(stripped_answer, "user_statement")
+                    ans_meta: dict[str, Any] = {
+                        "source_ref": f"agy-transcript:{step_index}",
+                        "step_index": step_index,
+                        "member_id": resolved_member,
+                        "role": "user",
+                        "agent": "antigravity",
+                        "capture": "antigravity-ask-question",
+                    }
+                    if facts:
+                        ans_meta["facts"] = facts
+                    events.append(
+                        EvidenceEvent(
+                            id=f"agy-uq-{sess_tag}-{step_index}-{_hash_content(stripped_answer)}",
+                            session_id=resolved_session,
+                            author=resolved_member,
+                            kind="user_message",
+                            content=stripped_answer,
+                            observed_at=observed_at,
+                            metadata=ans_meta,
+                        )
+                    )
+                return events
+
+            if include_tools and raw_content and not SENSITIVE.search(raw_content):
+                bounded = raw_content[:max_tool_chars]
+                res_id = f"agy-res-{sess_tag}-{step_index}-{_hash_content(bounded)}"
+                res_meta: dict[str, Any] = {
+                    "source_ref": f"agy-transcript:{step_index}",
+                    "step_index": step_index,
+                    "member_id": resolved_member,
+                    "agent": "antigravity",
+                    "capture": "antigravity-transcript",
+                }
+                exit_match = _CMD_EXIT_CODE_RE.search(bounded)
+                if exit_match:
+                    try:
+                        res_meta["exit_code"] = int(exit_match.group(1))
+                    except ValueError:
+                        pass
                 events.append(
                     EvidenceEvent(
                         id=res_id,
@@ -236,13 +212,7 @@ class AntigravityTranscriptAdapter:
                         kind="tool_result",
                         content=bounded,
                         observed_at=observed_at,
-                        metadata={
-                            "source_ref": f"agy-transcript:{step_index}",
-                            "step_index": step_index,
-                            "member_id": resolved_member,
-                            "agent": "antigravity",
-                            "capture": "antigravity-transcript",
-                        },
+                        metadata=res_meta,
                     )
                 )
 
@@ -259,9 +229,10 @@ class AntigravityTranscriptAdapter:
         max_tool_chars: int = 8000,
     ) -> list[EvidenceEvent]:
         transcript_path = Path(path).expanduser().resolve(strict=True)
-        resolved_session = session_id or transcript_path.parent.parent.name
+        resolved_session = session_id or infer_transcript_session_id(transcript_path)
         resolved_member = member_id.strip() or "antigravity"
         events: list[EvidenceEvent] = []
+        pending_ask_question = False
 
         with transcript_path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
@@ -280,10 +251,16 @@ class AntigravityTranscriptAdapter:
                     include_tools=include_tools,
                     max_tool_chars=max_tool_chars,
                     line_number=line_number,
+                    pending_ask_question=pending_ask_question,
                 )
                 events.extend(parsed)
-
-        return events
+                if record.get("source") == "MODEL" and record.get("type") == "PLANNER_RESPONSE":
+                    pending_ask_question = any(
+                        isinstance(c, dict) and c.get("name") == "ask_question"
+                        for c in (record.get("tool_calls") or [])
+                    )
+                elif record.get("source") == "USER_EXPLICIT" or (parsed and parsed[0].kind == "user_message"):
+                    pending_ask_question = False
 
         return events
 

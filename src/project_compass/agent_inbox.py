@@ -44,6 +44,8 @@ class AgentClient:
     member_id: str
     session_id: str
     agent: str
+    role_label: str = ""
+    role_brief: str = ""
 
 
 class AgentInbox:
@@ -59,9 +61,12 @@ class AgentInbox:
             raise ValueError('Agent config requires1 to8 clients')
         self.workspace, self.events, self.clients, self._tokens = workspace, events, [], []
         for item in config['clients']:
-            fields(item, ('client_id', 'member_id', 'session_id', 'agent', 'token'))
+            fields(item, ('client_id', 'member_id', 'session_id', 'agent', 'token'), ('role_label', 'role_brief'))
+            role_label = bounded(item['role_label'], 80) if 'role_label' in item else ''
+            role_brief = bounded(item['role_brief'], 240) if 'role_brief' in item else ''
             client = AgentClient(bounded(item['client_id'], 64, slug=True), bounded(item['member_id'], 120),
-                                 bounded(item['session_id'], 256), bounded(item['agent'], 64))
+                                 bounded(item['session_id'], 256), bounded(item['agent'], 64),
+                                 role_label=role_label, role_brief=role_brief)
             token = bounded(item['token'], 256)
             if (len(token) < 32 or not token.isascii() or any(char.isspace() for char in token) or
                 client.member_id in {self.owner_id, 'project-documents'} or
@@ -87,7 +92,7 @@ class AgentInbox:
             raise ValueError('invalid Agent config clients')
         clients = []
         for item in config['clients']:
-            fields(item, ('client_id', 'member_id', 'session_id', 'agent', 'token_env'))
+            fields(item, ('client_id', 'member_id', 'session_id', 'agent', 'token_env'), ('role_label', 'role_brief'))
             name = bounded(item['token_env'], 128)
             if not re.fullmatch(r'[A-Z][A-Z0-9_]*', name):
                 raise ValueError('invalid Agent credential environment name')
@@ -108,8 +113,21 @@ class AgentInbox:
         raise PermissionError('Agent credential required')
 
     def public_status(self):
-        return {'enabled': True, 'owner_id': self.owner_id,
-                'clients': [dict(client_id=c.client_id, member_id=c.member_id, session_id=c.session_id, agent=c.agent) for c in self.clients]}
+        return {
+            'enabled': True,
+            'owner_id': self.owner_id,
+            'clients': [
+                {
+                    'client_id': c.client_id,
+                    'member_id': c.member_id,
+                    'session_id': c.session_id,
+                    'agent': c.agent,
+                    **({'role_label': c.role_label} if c.role_label else {}),
+                    **({'role_brief': c.role_brief} if c.role_brief else {}),
+                }
+                for c in self.clients
+            ],
+        }
 
     def _batch(self, payload, name):
         fields(payload, ('schema_version', name))

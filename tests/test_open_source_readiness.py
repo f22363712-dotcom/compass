@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -46,13 +47,17 @@ class OpenSourceReadinessTests(unittest.TestCase):
         self.assertIn("Version 2.0", license_text)
 
         pyproject_text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        pyproject_data = tomllib.loads(pyproject_text)
+        pkg_globs = pyproject_data["tool"]["setuptools"]["package-data"]["project_compass"]
         self.assertIn('requires = ["setuptools>=68"]', pyproject_text)
         self.assertIn('license = {text = "Apache-2.0"}', pyproject_text)
         self.assertIn('dependencies = []', pyproject_text)
-        self.assertIn('project_compass = ["web/*"]', pyproject_text)
+        self.assertIn("web/*", pkg_globs)
+        self.assertIn("antigravity_plugin/compass/*", pkg_globs)
+        self.assertIn("antigravity_plugin/compass/sidecars/compass_board/*", pkg_globs)
         self.assertIn('compass = "project_compass.cli:main"', pyproject_text)
         self.assertIn('compass-mcp = "project_compass.mcp_server:main"', pyproject_text)
-        self.assertEqual(__version__, "1.4.0")
+        self.assertEqual(__version__, "1.6.1")
 
         html_text = (REPO_ROOT / "src" / "project_compass" / "web" / "index.html").read_text(encoding="utf-8")
         self.assertIn('id="work-mode-switch"', html_text)
@@ -61,10 +66,19 @@ class OpenSourceReadinessTests(unittest.TestCase):
 
         server_meta = json.loads((REPO_ROOT / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server_meta["license"], "Apache-2.0")
-        self.assertEqual(server_meta["version"], "1.4.0")
+        self.assertEqual(server_meta["version"], "1.6.1")
         self.assertEqual(
             [tool["name"] for tool in server_meta["capabilities"]["tools"]],
-            ["project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"],
+            [
+                "project_context",
+                "append_evidence",
+                "query_state",
+                "propose_fact",
+                "record_note",
+                "verify_completion",
+                "open_compass",
+                "compass_app_action",
+            ],
         )
 
         # MCP initialize reports package __version__
@@ -75,7 +89,7 @@ class OpenSourceReadinessTests(unittest.TestCase):
             adapter = WorkspaceMCPAdapter(ProjectWorkspace(Path(tmp) / "ws", project_dir), ctx)
             server = ProjectCompassMCPServer(adapter)
             init_res = server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
-            self.assertEqual(init_res["result"]["serverInfo"]["version"], "1.4.0")
+            self.assertEqual(init_res["result"]["serverInfo"]["version"], "1.6.1")
 
     def test_o3_zero_config_workspace_mcp_flow_and_remote_token_guard(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,18 @@
-const state = { data: null, lens: "personal", workMode: null, workbenchView: readStorage("compass_workbench_view") === "mindmap" ? "mindmap" : "list", member: null, evidenceQuery: "", layer: "overview", refreshing: false, quickNotePending: false, anchorEditing: null, anchorSaving: false, pendingSignerAction: null, revision: 0, investigationRequest: 0, projectId: null, activeChapterId: null, freshFactIds: new Set(), freshTimer: null, evidenceCache: Object.create(null), evidenceRequestSeq: 0, popoverTimer: null, popoverAnchor: null, popoverCurrentId: null, lastTriggerElement: null, lastModalTrigger: null, lastDrawerTrigger: null, lastDrawerTriggerSpec: null, copyRestoreTimer: null, exportTimers: Object.create(null) };
+const state = { data: null, lens: "personal", workMode: null, workbenchView: readStorage("compass_workbench_view") === "mindmap" ? "mindmap" : "list", member: null, evidenceQuery: "", layer: "overview", refreshing: false, quickNotePending: false, anchorEditing: null, anchorSaving: false, pendingSignerAction: null, revision: 0, investigationRequest: 0, projectId: null, activeChapterId: null, activeWorkspaceUri: "", inflightWorkspaceUri: "", pendingWorkspaceUri: "", sidecarActivating: false, freshFactIds: new Set(), freshTimer: null, evidenceCache: Object.create(null), evidenceRequestSeq: 0, popoverTimer: null, popoverAnchor: null, popoverCurrentId: null, lastTriggerElement: null, lastModalTrigger: null, lastDrawerTrigger: null, lastDrawerTriggerSpec: null, copyRestoreTimer: null, toastTimer: null, exportTimers: Object.create(null) };
+
+function getSidecarToken() {
+  try {
+    const search = typeof window !== "undefined" ? String(window.location?.search || "") : "";
+    if (!search || typeof URLSearchParams !== "function") return "";
+    return URLSearchParams ? (new URLSearchParams(search).get("token") || "") : "";
+  } catch (_err) {
+    return "";
+  }
+}
+
+function hasSidecarBridge() {
+  return typeof window !== "undefined" && Boolean(window.sidecar && (window.sidecar.agent || window.sidecar.ui || typeof window.sidecar.getWorkspaceUris === "function"));
+}
 
 const cleanUiText = (value) => String(value ?? "").replace(/\*\*/g, "").replace(/__/g, "").replace(/`/g, "").replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, "").replace(/\s+/g, " ").trim();
 
@@ -62,7 +76,8 @@ function effectiveWorkMode() {
     return saved;
   }
   const humanMembers = Object.keys(state.data?.personal || {}).filter((member) => member !== "project-documents");
-  return humanMembers.length > 1 ? "team" : "solo";
+  const teamClients = state.data?.agent_api?.enabled ? (state.data.agent_api.clients || []).length : 0;
+  return (humanMembers.length > 1 || teamClients > 1) ? "team" : "solo";
 }
 function setWorkMode(mode) {
   const normalized = mode === "team" ? "team" : "solo";
@@ -201,7 +216,7 @@ const subjectKeyLabel = (subjectKey) => {
   const key = String(subjectKey || "").trim();
   if (!key) return "项目记录";
   if (key === "project.goal" || key.startsWith("doc.goal.")) return "项目核心目标";
-  if (key === "project.next_step") return "当前下一步共识";
+  if (key === "project.next_step") return "当前下一步";
   if (key.startsWith("doc.task.") || key.startsWith("note.task.") || key.startsWith("task.")) return "待办事项";
   if (key.startsWith("doc.decision.") || key.startsWith("note.decision.") || key.startsWith("dec.")) return "方案决策";
   if (key.startsWith("note.assumption.")) return "待验证前提";
@@ -316,7 +331,7 @@ function canInlineAcceptFact(fact) {
   if ((state.data?.team?.directions?.current || []).some((row) => row.fact_id === fact.id)) return false;
   return resolveFactStatus(fact) !== "accepted";
 }
-const sourceNote = (fact) => fact.source_state?.status === "superseded" ? "来源已换版，需复核" : fact.source_state?.status === "unavailable" ? "来源当前不可用，需复核" : "";
+const sourceNote = (fact) => fact.source_state?.status === "superseded" ? "原文件已更新，请核对" : fact.source_state?.status === "unavailable" ? "来源当前不可用，请核对" : "";
 const olderState = (payload) => Number.isFinite(payload.state_version) && Number.isFinite(state.data?.state_version) && payload.state_version < state.data.state_version;
 const formatTime = (value) => { if (!value) return "时间未记录"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", {hour12: false}); };
 const sourceTimeLabel = (record) => record.source_kind === 'file_snapshot' ? '材料采集时间' : '来源记录时间';
@@ -330,9 +345,25 @@ async function apiFetch(url, options = {}) {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
+    const sidecarToken = getSidecarToken();
+    let mergedHeaders = fetchOptions.headers;
+    if (sidecarToken) {
+      if (typeof Headers !== "undefined" && fetchOptions.headers instanceof Headers) {
+        const nextHeaders = new Headers(fetchOptions.headers);
+        if (!nextHeaders.has("X-Sidecar-Token")) nextHeaders.set("X-Sidecar-Token", sidecarToken);
+        mergedHeaders = nextHeaders;
+      } else {
+        const baseHeaders = { ...(fetchOptions.headers || {}) };
+        if (!("X-Sidecar-Token" in baseHeaders) && !("x-sidecar-token" in baseHeaders)) {
+          baseHeaders["X-Sidecar-Token"] = sidecarToken;
+        }
+        mergedHeaders = baseHeaders;
+      }
+    }
     const response = await fetch(url, {
       cache: "no-store",
       ...fetchOptions,
+      ...(mergedHeaders !== undefined ? { headers: mergedHeaders } : {}),
       signal: controller ? controller.signal : undefined,
     });
     if (!response.ok) {
@@ -505,16 +536,18 @@ function renderQuickNoteBar(isSolo) {
   if (acceptWrap) acceptWrap.hidden = Boolean(state.data?.agent_api?.enabled);
   if (!form) return;
   const readOnly = Boolean(state.data?.project?.read_only);
-  form.classList?.toggle?.("is-readonly", readOnly);
-  if (kindSelect) kindSelect.disabled = readOnly || state.quickNotePending;
+  const sampleMode = Boolean(state.data?.sample_mode);
+  const notesDisabled = readOnly || sampleMode;
+  form.classList?.toggle?.("is-readonly", notesDisabled);
+  if (kindSelect) kindSelect.disabled = notesDisabled || state.quickNotePending;
   if (input) {
-    input.disabled = readOnly || state.quickNotePending;
-    input.placeholder = readOnly ? "只读历史项目不可写入随手记，请切回当前运行项目" : (isSolo ? "随手记一条待定思路、前提或待办，自动沉淀可溯源记录…" : "随手记一条项目思路、前提或待办，先记为个人候选…");
+    input.disabled = notesDisabled || state.quickNotePending;
+    input.placeholder = sampleMode ? "演示样例暂不支持新增随手记（可体验上方按钮与脑图）" : readOnly ? "只读历史项目不可写入随手记，请切回当前运行项目" : (isSolo ? "随手记一条待定思路、前提或待办，自动沉淀可溯源记录…" : "随手记一条项目思路、前提或待办，先记为个人候选…");
   }
-  if (acceptBox) acceptBox.disabled = readOnly || state.quickNotePending;
-  if (submitBtn) submitBtn.disabled = readOnly || state.quickNotePending;
-  if (feedback && readOnly && !feedback.textContent) {
-    feedback.textContent = "只读项目不可新增随手记";
+  if (acceptBox) acceptBox.disabled = notesDisabled || state.quickNotePending;
+  if (submitBtn) submitBtn.disabled = notesDisabled || state.quickNotePending;
+  if (feedback && notesDisabled && !feedback.textContent) {
+    feedback.textContent = sampleMode ? "演示样例不支持新增随手记" : "只读项目不可新增随手记";
   }
 }
 
@@ -522,8 +555,8 @@ async function submitQuickNote(event, overrides = {}) {
   event?.preventDefault?.();
   if (state.quickNotePending) return;
   const feedback = document.getElementById("quick-note-feedback");
-  if (state.data?.project?.read_only) {
-    if (feedback) feedback.textContent = "当前项目为只读预览，不能添加随手记。";
+  if (state.data?.project?.read_only || state.data?.sample_mode) {
+    if (feedback) feedback.textContent = state.data?.sample_mode ? "演示样例不支持新增随手记。" : "当前项目为只读预览，不能添加随手记。";
     return;
   }
   const kindEl = document.getElementById("quick-note-kind");
@@ -603,13 +636,33 @@ function selectAvailableMember() {
   state.member = members.includes(preferred) ? preferred : members.find((member) => member !== "project-documents") || members[0] || null;
 }
 
+function getClientRoleMap() {
+  const map = new Map();
+  const clients = state.data?.agent_api?.clients;
+  if (Array.isArray(clients)) {
+    clients.forEach((client) => {
+      if (client?.member_id && client?.role_label) {
+        map.set(String(client.member_id), String(client.role_label));
+      }
+    });
+  }
+  return map;
+}
+
 function renderMemberPicker(members) {
   const picker = document.getElementById("member-picker");
   const select = document.getElementById("member-select");
   const isSolo = effectiveWorkMode() === "solo";
+  const roleMap = getClientRoleMap();
   const nonDocMembers = members.filter((member) => member !== "project-documents");
   picker.hidden = state.lens !== "personal" || (isSolo && nonDocMembers.length <= 1);
-  select.innerHTML = members.length ? members.map((member) => `<option value="${esc(member)}">${member === "project-documents" ? "项目材料" : esc(member)}</option>`).join("") : `<option value="">暂无成员数据</option>`;
+  select.innerHTML = members.length
+    ? members.map((member) => {
+        if (member === "project-documents") return `<option value="${esc(member)}">项目材料</option>`;
+        const roleLabel = roleMap.get(member);
+        return `<option value="${esc(member)}">${esc(roleLabel ? `${member} · ${roleLabel}` : member)}</option>`;
+      }).join("")
+    : `<option value="">暂无成员数据</option>`;
   select.value = state.member || "";
 }
 
@@ -645,13 +698,13 @@ function applyModeLexicon(isSolo, workbenchView) {
     "handoff-brief-label": isSolo ? "续写快照" : "交接简报",
     "goal-kicker": "核心目标",
     "hero-copy": computeHeroSummary(isSolo),
-    "legend-accepted-title": isSolo ? "已定案关系" : "已确认关系",
-    "legend-accepted-desc": isSolo ? "你已拍板定案的基准与依据关系。" : "负责人已经确认的事实与依据关系。",
-    "legend-candidate-desc": isSolo ? "AI 或会话提炼的待定关联，留待你拍板。" : "材料可能支持该结论，仍待人工核对。",
+    "legend-accepted-title": isSolo ? "已定依据" : "已确认依据",
+    "legend-accepted-desc": isSolo ? "你已拍板定案的结论与依据关联。" : "负责人已经确认的结论与依据关联。",
+    "legend-candidate-desc": isSolo ? "AI 或会话提炼的待核对关联，留待你确认。" : "材料可能支持该结论，仍待人工核对。",
     "activity-kicker": isSolo ? "会话动态" : "推进动态",
-    "personal-todos-kicker": isSolo ? "待办与坑位" : "待办清单",
-    "personal-decisions-kicker": isSolo ? "待拍板与前提" : "决策台账",
-    "solo-baseline-kicker": "已定案基准",
+    "personal-todos-kicker": isSolo ? "待办事项" : "待办清单",
+    "personal-decisions-kicker": isSolo ? "待确认想法" : "决策台账",
+    "solo-baseline-kicker": "已定基准",
     "conflict-kicker": isSolo ? "变更与历史" : "分歧对照与裁决",
     "review-queue-kicker": isSolo ? "待定案" : "待晋升候选",
     "trace-confirm-note": isSolo ? "定案状态单独标记 · 时间顺序不代表因果" : "负责人确认单独标记 · 时间顺序不代表因果",
@@ -665,18 +718,91 @@ function applyModeLexicon(isSolo, workbenchView) {
   });
 }
 
+function showCompassToast(message) {
+  const toast = document.getElementById("compass-toast");
+  if (!toast) return;
+  toast.textContent = String(message || "");
+  toast.hidden = !message;
+  if (state.toastTimer) clearTimeout(state.toastTimer);
+  if (message) {
+    state.toastTimer = setTimeout(() => {
+      state.toastTimer = null;
+      const cur = document.getElementById("compass-toast");
+      if (cur) cur.hidden = true;
+    }, 4000);
+  }
+}
+
+function formatDispatchBrief(fact) {
+  const title = cleanUiText(fact.short_title || fact.clean_value || fact.value || "已定案事项");
+  const value = cleanUiText(fact.value || title);
+  const evIds = Array.isArray(fact.evidence_ids) ? fact.evidence_ids.filter(Boolean) : [];
+  const evLine = evIds.length ? `\n依据编号：${evIds.join("、")}` : "";
+  return `【Compass 已定案推进】${title}\n确认内容：${value}${evLine}\n请严格按此已定案基准执行，不要偏离或回退。`;
+}
+
 function decisionActionBar(fact, isSolo, effectiveStatus) {
   if (effectiveStatus === "accepted") {
-    return `<span class="in-card-actions">${renderStatusBadge("accepted", isSolo ? "✓ 已定案基准" : "✓ 已确认共识")}</span>`;
+    const dispatchBtn = !state.data.project?.read_only
+      ? `<button type="button" class="mini-btn dispatch-btn" data-dispatch-fact="${esc(fact.id)}" title="加入优先执行列表并复制执行指令">✓ 确认并交给 AI</button>`
+      : "";
+    return `<span class="in-card-actions">${renderStatusBadge("accepted", isSolo ? "✓ 已定案基准" : "✓ 已确认共识")}${dispatchBtn}</span>`;
   }
   if (state.data.project?.read_only) return "";
   const acceptBtn = canInlineAcceptFact(fact)
     ? `<button type="button" class="mini-btn accept-btn" data-inline-review="accept_fact" data-target-id="${esc(fact.id)}" title="${isSolo ? "定案为项目基准" : "确认为团队共识"}">${isSolo ? "✓ 定案基准" : "✓ 确认决策"}</button>`
     : "";
+  const dispatchBtn = canInlineAcceptFact(fact)
+    ? `<button type="button" class="mini-btn dispatch-btn" data-dispatch-fact="${esc(fact.id)}" title="确认后加入优先执行列表，同时复制执行指令">✓ 确认并交给 AI</button>`
+    : "";
   const rejectBtn = effectiveStatus === "rejected"
     ? ""
     : `<button type="button" class="mini-btn reject-btn" data-inline-review="reject_fact" data-target-id="${esc(fact.id)}" title="${isSolo ? "暂不采用" : "驳回候选"}">${isSolo ? "✕ 暂不采纳" : "✕ 驳回"}</button>`;
-  return (acceptBtn || rejectBtn) ? `<span class="in-card-actions">${acceptBtn}${rejectBtn}</span>` : "";
+  return (acceptBtn || dispatchBtn || rejectBtn) ? `<span class="in-card-actions">${acceptBtn}${dispatchBtn}${rejectBtn}</span>` : "";
+}
+
+function renderCausalChipStripHTML(fact) {
+  const dc = fact?.decision_context;
+  if (!dc || typeof dc !== "object") return "";
+  const chips = [];
+  if (dc.stage === "open_fork" && Array.isArray(dc.alternatives) && dc.alternatives.length) {
+    chips.push(`<span class="causal-chip is-fork">多选方案 · ${dc.alternatives.length}项</span>`);
+  } else if (dc.stage === "rejected_path") {
+    return `<div class="causal-chip-row"><span class="causal-chip is-rejected">已排除路线</span></div>`;
+  }
+  if (Array.isArray(dc.premises) && dc.premises.length) {
+    const prem = dc.premises[0];
+    const pCls = prem.status === "verified" ? "is-premise-ok" : prem.status === "invalidated" ? "is-premise-bad" : "is-premise";
+    const pText = prem.status === "verified" ? "前提已核实" : prem.status === "invalidated" ? "前提不成立" : "前提待核实";
+    chips.push(`<span class="causal-chip ${pCls}">${esc(pText)} · ${esc(truncateUiText(cleanUiText(prem.title || ""), 16))}</span>`);
+  }
+  if (Array.isArray(dc.rejected_paths) && dc.rejected_paths.length && dc.stage !== "rejected_path") {
+    chips.push(`<span class="causal-chip is-rejected">已淘汰对比 · ${dc.rejected_paths.length}项</span>`);
+  }
+  return chips.length ? `<div class="causal-chip-row">${chips.join("")}</div>` : "";
+}
+
+function renderCausalDrawerSectionHTML(fact) {
+  const dc = fact?.decision_context;
+  if (!dc || typeof dc !== "object") return "";
+  const blocks = [];
+  if (Array.isArray(dc.alternatives) && dc.alternatives.length) {
+    blocks.push(`<div class="detail-block"><div class="detail-label">多个备选方案</div><div class="causal-drawer-group">${dc.alternatives.map((alt) => `<div class="causal-drawer-item">${esc(cleanUiText(alt))}</div>`).join("")}</div></div>`);
+  }
+  if (dc.stage === "rejected_path" || dc.rejection_reason) {
+    const reasonText = dc.rejection_reason ? cleanUiText(dc.rejection_reason) : "已记录为明确排除的路径";
+    blocks.push(`<div class="detail-block"><div class="detail-label">已排除方案与原因</div><div class="causal-drawer-item">${esc(reasonText)}</div></div>`);
+  }
+  if (Array.isArray(dc.premises) && dc.premises.length) {
+    blocks.push(`<div class="detail-block"><div class="detail-label">依赖前提条件</div><div class="causal-drawer-group">${dc.premises.map((p) => {
+      const tag = p.status === "verified" ? "已核实" : p.status === "invalidated" ? "不成立" : "未验证";
+      return `<div class="causal-drawer-item"><strong>[${esc(tag)}]</strong> ${esc(cleanUiText(p.title || ""))} ${renderEvPills(p.evidence_ids)}</div>`;
+    }).join("")}</div></div>`);
+  }
+  if (Array.isArray(dc.rejected_paths) && dc.rejected_paths.length) {
+    blocks.push(`<div class="detail-block"><div class="detail-label">关联已淘汰方案</div><div class="causal-drawer-group">${dc.rejected_paths.map((r) => `<div class="causal-drawer-item"><strong>${esc(cleanUiText(r.title || ""))}</strong> · 原因：${esc(cleanUiText(r.reason || "已排除"))} ${renderEvPills(r.evidence_ids)}</div>`).join("")}</div></div>`);
+  }
+  return blocks.join("");
 }
 
 function renderDecisionCardHTML(fact, isSolo) {
@@ -687,23 +813,24 @@ function renderDecisionCardHTML(fact, isSolo) {
     : fact.kind === "task"
       ? (effectiveStatus === "accepted" ? "已定案行动项" : "待办事项")
       : fact.kind === "decision"
-        ? (effectiveStatus === "accepted" ? "已定案决策" : "待拍板决策")
-        : (effectiveStatus === "accepted" ? "已核实前提" : "未验证前提");
+        ? (effectiveStatus === "accepted" ? "已定案决策" : fact.decision_context?.stage === "open_fork" ? "多个备选方案" : fact.decision_context?.stage === "rejected_path" ? "已排除方案" : "待拍板决策")
+        : (fact.decision_context?.premise_status === "verified" || effectiveStatus === "accepted" ? "已核实前提" : fact.decision_context?.premise_status === "invalidated" ? "前提不成立" : "未验证前提");
   const inlineTriage = superseder ? "" : decisionActionBar(fact, isSolo, effectiveStatus);
   const displayTitle = fact.short_title || fact.clean_value || cleanUiText(fact.value);
   const freshCls = state.freshFactIds?.has?.(fact.id) ? " is-fresh-node" : "";
   const statusPill = superseder
     ? renderStatusBadge("superseded", "已由新定案接替")
-    : renderStatusBadge(effectiveStatus);
+    : renderStatusBadge(effectiveStatus, isSolo && effectiveStatus === "proposed" ? "待拍板" : "");
   const subText = superseder
     ? `已被「${truncateUiText(cleanUiText(superseder.short_title || superseder.value), 30)}」接替 · ${fact.evidence_ids?.length || 0} 条依据`
     : `${statusLabel(effectiveStatus)} · ${fact.evidence_ids?.length || 0} 条依据`;
   const conflictHint = superseder ? "" : renderCardConflictHintHTML(fact, isSolo);
-  return `<div class="decision-item${freshCls}" role="button" tabindex="0" data-fact-id="${esc(fact.id)}"><strong>${typeTag}</strong><span>${esc(displayTitle)}</span><small>${esc(subText)}</small>${conflictHint}<div class="card-pill-row">${statusPill}${renderEvPills(fact.evidence_ids)}</div>${inlineTriage}</div>`;
+  const causalChips = renderCausalChipStripHTML(fact);
+  return `<div class="decision-item${freshCls}" role="button" tabindex="0" data-fact-id="${esc(fact.id)}"><strong>${typeTag}</strong><span>${esc(displayTitle)}</span><small>${esc(subText)}</small>${conflictHint}${causalChips}<div class="card-pill-row">${statusPill}${renderEvPills(fact.evidence_ids)}</div>${inlineTriage}</div>`;
 }
 
 function openAnchorInlineForm(targetKind, initialText = "") {
-  if (state.data?.project?.read_only) return;
+  if (state.data?.project?.read_only || state.data?.sample_mode) return;
   const form = document.getElementById("anchor-inline-form");
   const input = document.getElementById("anchor-inline-input");
   const saveBtn = document.getElementById("anchor-inline-save");
@@ -713,7 +840,7 @@ function openAnchorInlineForm(targetKind, initialText = "") {
   input.value = cleanUiText(initialText);
   input.placeholder = state.anchorEditing === "goal"
     ? "输入一句话核心目标（约10～25字），回车即定案…"
-    : "输入一句当前下一步工作共识，回车即锁定…";
+    : "输入一句当前下一步计划，回车即锁定…";
   if (saveBtn) saveBtn.disabled = state.anchorSaving;
   input.focus?.();
 }
@@ -726,7 +853,7 @@ function closeAnchorInlineForm() {
 
 async function saveAnchorInlineForm(event) {
   event?.preventDefault?.();
-  if (state.anchorSaving || !state.anchorEditing || state.data?.project?.read_only) return;
+  if (state.anchorSaving || !state.anchorEditing || state.data?.project?.read_only || state.data?.sample_mode) return;
   const input = document.getElementById("anchor-inline-input");
   const saveBtn = document.getElementById("anchor-inline-save");
   const targetKind = state.anchorEditing;
@@ -782,6 +909,8 @@ async function saveAnchorInlineForm(event) {
   }
 }
 
+const hintCategoryLabel = (cat) => ({ "盲区预警": "踩坑提醒", "待定锚点": "还没定目标", "未验前提": "待核实假设", "方案权衡": "方案对比" }[cat] || cat || "提示");
+
 function renderAgentHints(isSolo) {
   const surface = document.getElementById("agent-hints-surface");
   const listEl = document.getElementById("agent-hints-list");
@@ -796,9 +925,9 @@ function renderAgentHints(isSolo) {
   }
   surface.hidden = false;
   if (modeEl) {
-    modeEl.textContent = hints.some((h) => h.source === "llm") ? "语义提示" : "本地规则";
+    modeEl.textContent = hints.some((h) => h.source === "llm") ? "AI 提醒" : "规则提醒";
   }
-  listEl.innerHTML = hints.slice(0, 2).map((hint) => {
+  listEl.innerHTML = hints.slice(0, 3).map((hint) => {
     const badgeCls = hint.level === "warn" ? "is-warn" : (hint.source === "llm" ? "is-info" : "is-proposed");
     const evId = (hint.evidence_ids && hint.evidence_ids[0]) ? hint.evidence_ids[0] : "";
     const actionBtn = hint.action_label
@@ -807,7 +936,7 @@ function renderAgentHints(isSolo) {
     const evLinks = evId ? renderEvPills([evId]) : "";
     return `<div class="agent-hint-card level-${safeToken(hint.level, "info")}">
       <div class="agent-hint-body">
-        <span class="status-badge ${badgeCls}">${esc(hint.category || "提示")}</span>
+        <span class="status-badge ${badgeCls}">${esc(hintCategoryLabel(hint.category))}</span>
         <span class="agent-hint-text">${esc(cleanUiText(hint.text || ""))}</span>
         ${evLinks}
       </div>
@@ -828,7 +957,7 @@ function renderDualAnchors(isSolo, goal, isGoalAccepted) {
   if (goal && !isGoalAccepted && canInlineAcceptFact(goal)) {
     goalActionBtns.push(`<button type="button" class="mini-btn accept-btn" data-inline-review="accept_fact" data-target-id="${esc(goal.id)}" title="${isSolo ? "定案为核心目标" : "确认为团队核心目标"}">${isSolo ? "✓ 定案为核心目标" : "✓ 确认为团队目标"}</button>`);
   }
-  if (!state.data?.project?.read_only) {
+  if (!state.data?.project?.read_only && !state.data?.sample_mode) {
     const goalSeed = goal ? (goal.short_title || goal.clean_value || cleanUiText(goal.value)) : "";
     goalActionBtns.push(`<button type="button" class="mini-btn" data-anchor-edit="goal" data-anchor-seed="${esc(goalSeed)}">${goal ? "✎ 改写定案" : "✎ 设定目标"}</button>`);
   }
@@ -838,13 +967,16 @@ function renderDualAnchors(isSolo, goal, isGoalAccepted) {
   const goalActionsEl = document.getElementById("goal-actions");
   if (goalActionsEl) goalActionsEl.innerHTML = goalActions.join("");
 
-  const nextItem = state.data?.next_consensus || state.data?.handoff_brief?.next_consensus || null;
+  const rawNextItem = state.data?.next_consensus || state.data?.handoff_brief?.next_consensus || null;
+  const rawNextStatus = rawNextItem ? resolveFactStatus({ id: rawNextItem.fact_id, status: rawNextItem.status }) : "empty";
+  const nextCompleted = Boolean(rawNextItem && (rawNextItem.completed || rawNextItem.task_state === "completed" || rawNextItem.task_state === "reported_complete"));
+  const nextItem = (rawNextStatus === "rejected" || nextCompleted) ? null : rawNextItem;
   const nextTitleEl = document.getElementById("next-consensus-title");
   const nextNoteEl = document.getElementById("next-consensus-note");
   const nextStatusEl = document.getElementById("next-consensus-status");
   const nextActionsEl = document.getElementById("next-consensus-actions");
 
-  const resolvedStatus = nextItem ? resolveFactStatus({ id: nextItem.fact_id, status: nextItem.status }) : "empty";
+  const resolvedStatus = nextItem ? rawNextStatus : "empty";
   const isNextAccepted = Boolean(nextItem && !nextItem.is_candidate_suggestion && resolvedStatus === "accepted");
   if (nextTitleEl) {
     nextTitleEl.textContent = nextItem
@@ -870,8 +1002,8 @@ function renderDualAnchors(isSolo, goal, isGoalAccepted) {
       nextNoteEl.textContent = "当前暂无独立下一步任务，暂展示最近一条活跃思路供参考；可直接改写锁定。";
     } else {
       nextNoteEl.textContent = isNextAccepted
-        ? (isSolo ? "已锁定为当前推进共识 · 新动向未完成前以此为准" : "已确认的下一步工作共识")
-        : "待定下一步工作 · 拍板后全站同步对齐";
+        ? (isSolo ? "已定为当前下一步 · 完成或更换目标时可随时更新" : "已确认的当前下一步")
+        : "待定下一步工作 · 确认后全站同步对齐";
     }
   }
   if (nextActionsEl) {
@@ -883,7 +1015,10 @@ function renderDualAnchors(isSolo, goal, isGoalAccepted) {
     if (nextItem && !isNextAccepted && !nextItem.is_candidate_suggestion && nextItem.fact_id && !state.data?.project?.read_only) {
       nextBtns.push(`<button type="button" class="mini-btn accept-btn" data-inline-review="accept_fact" data-target-id="${esc(nextItem.fact_id)}">✓ 定案下一步</button>`);
     }
-    if (!state.data?.project?.read_only) {
+    if (nextItem && !nextItem.is_candidate_suggestion && nextItem.fact_id && !state.data?.project?.read_only) {
+      nextBtns.push(`<button type="button" class="mini-btn" data-inline-review="complete_fact" data-target-id="${esc(nextItem.fact_id)}" title="标记这项已完成，不再当成当前下一步">✓ 标记已完成</button>`);
+    }
+    if (!state.data?.project?.read_only && !state.data?.sample_mode) {
       const nextSeed = nextItem ? (nextItem.short_title || nextItem.clean_value || cleanUiText(nextItem.value)) : "";
       nextBtns.push(`<button type="button" class="mini-btn" data-anchor-edit="next_step" data-anchor-seed="${esc(nextSeed)}">${nextItem ? "✎ 改写定案" : "✎ 设定下一步"}</button>`);
     }
@@ -893,7 +1028,7 @@ function renderDualAnchors(isSolo, goal, isGoalAccepted) {
 
   const inlineForm = document.getElementById("anchor-inline-form");
   if (inlineForm) {
-    inlineForm.hidden = !state.anchorEditing || Boolean(state.data?.project?.read_only);
+    inlineForm.hidden = !state.anchorEditing || Boolean(state.data?.project?.read_only || state.data?.sample_mode);
   }
 }
 
@@ -958,8 +1093,8 @@ function render() {
   const viewHintEl = document.getElementById("workbench-view-hint");
   if (viewHintEl) {
     viewHintEl.textContent = workbenchView === "mindmap"
-      ? "实时正交脑图 · 点击任意分支溯源原文或定案"
-      : "待拍板与已定案基准清晰分流 · 支持随手记与一键定案";
+      ? "实时思维脑图 · 点击任意分支溯源原文或确认"
+      : "待确认与已定基准清晰分流 · 支持随手记与一键确认";
   }
   const submit = document.getElementById("investigate-submit");
   if (submit) submit.disabled = false;
@@ -1043,7 +1178,7 @@ function render() {
   const isGoalAccepted = Boolean(goal && goalEffectiveStatus === "accepted");
   const goalBadgeMeta = getBadgeMeta(goalEffectiveStatus);
 
-  document.getElementById("goal-title").textContent = goal ? (goal.short_title || goal.clean_value || cleanUiText(goal.value)) : "核心目标待定锚";
+  document.getElementById("goal-title").textContent = goal ? (goal.short_title || goal.clean_value || cleanUiText(goal.value)) : "核心目标待确定";
   document.getElementById("goal-note").textContent = goal
     ? `${isGoalAccepted ? (isSolo ? "已定案为核心目标" : "已确认为团队目标") : (isSolo ? "待定目标思路 · 尚未拍板定案" : "候选目标 · 尚未经负责人确认为团队共识")} · ${goal.evidence_ids?.length || 0} 条依据 · ${sourceTimeText(goal)}${isGoalAccepted ? "" : " · 有效性待核对"}`
     : state.data.project?.fact_count ? "请在下方或右侧思维脑图确认主目标，或在随手记补全一条核心目标。" : "写一条随手记或用 MCP 记下第 1 个目标，右侧脑图自动生长。";
@@ -1076,8 +1211,8 @@ function render() {
   document.getElementById("spine-count").textContent = query ? `${visibleEvidence.length}/${evidence.length}` : evidence.length;
   document.getElementById("metrics").innerHTML = [
     metric(facts.length, state.lens === "team" ? (isSolo ? "基准条目" : "团队陈述") : state.member === "project-documents" ? "材料候选" : (isSolo ? "个人记录" : "个人候选")),
-    metric(tasks, "待办候选"),
-    metric(candidates, "候选关系"),
+    metric(tasks, "待办事项"),
+    metric(candidates, "待核对关联"),
     metric((state.data.team?.facts || []).filter((fact) => fact.status === "accepted" && sourceCurrent(fact)).length, isSolo ? "已定案基准" : "当前已确认事实"),
     metric(unlinkedEvidence, "未关联证据"),
   ].join("");
@@ -1106,11 +1241,15 @@ function render() {
     const isCompleted = fact.task_state === "completed" || fact.task_state === "reported_complete";
     let inlineTriage = "";
     if (accepted) {
-      inlineTriage = `<span class="in-card-actions">${renderStatusBadge("accepted", isSolo ? "✓ 已定案" : "✓ 团队事实")}</span>`;
-    } else if (!state.data.project?.read_only) {
+      const dispatchBtn = !state.data.project?.read_only && !isCompleted
+        ? `<button type="button" class="mini-btn dispatch-btn" data-dispatch-fact="${esc(fact.id)}" title="加入优先执行列表并复制执行指令">✓ 确认并交给 AI</button>`
+        : "";
+      inlineTriage = `<span class="in-card-actions">${renderStatusBadge("accepted", isCompleted ? "✓ 已完成" : (isSolo ? "✓ 已定案" : "✓ 团队事实"))}${dispatchBtn}</span>`;
+    } else if (!state.data.project?.read_only && !isCompleted) {
       const acceptBtn = canInlineAcceptFact(fact) ? `<button type="button" class="mini-btn accept-btn" data-inline-review="accept_fact" data-target-id="${esc(fact.id)}" title="${isSolo ? "定案为项目基准" : "采纳为团队任务"}">${isSolo ? "✓ 定案" : "✓ 采纳"}</button>` : "";
+      const dispatchBtn = canInlineAcceptFact(fact) ? `<button type="button" class="mini-btn dispatch-btn" data-dispatch-fact="${esc(fact.id)}" title="确认后加入优先执行列表，同时复制执行指令">✓ 确认并交给 AI</button>` : "";
       const rejectBtn = rejected ? "" : `<button type="button" class="mini-btn reject-btn" data-inline-review="reject_fact" data-target-id="${esc(fact.id)}" title="驳回候选">✕ 驳回</button>`;
-      inlineTriage = (acceptBtn || rejectBtn) ? `<span class="in-card-actions">${acceptBtn}${rejectBtn}</span>` : "";
+      inlineTriage = (acceptBtn || dispatchBtn || rejectBtn) ? `<span class="in-card-actions">${acceptBtn}${dispatchBtn}${rejectBtn}</span>` : "";
     }
     const freshCls = state.freshFactIds?.has?.(fact.id) ? " is-fresh-node" : "";
     const statusText = isSolo && effectiveStatus === "accepted" ? "已定案" : statusLabel(effectiveStatus);
@@ -1134,10 +1273,29 @@ function render() {
   document.getElementById("personal-decisions").hidden = state.lens !== "personal";
   const decisionsCountEl = document.getElementById("personal-decisions-count");
   if (isSolo) {
-    const pendingItems = allDecisions.filter((fact) => resolveFactStatus(fact) !== "accepted");
-    const pendingDecs = pendingItems.filter((fact) => fact.kind === "decision");
-    const pendingAssumps = pendingItems.filter((fact) => fact.kind === "assumption");
-    if (decisionsCountEl) decisionsCountEl.textContent = pendingItems.length;
+    const pendingItems = allDecisions.filter((fact) => {
+      const st = resolveFactStatus(fact);
+      if (st === "accepted" || st === "rejected") return false;
+      if (fact.completed || fact.task_state === "completed" || fact.task_state === "reported_complete") return false;
+      if (fact.superseded_by_fact_id || fact.decision_context?.stage === "rejected_path") return false;
+      if (findSupersedingAcceptedFact(fact)) return false;
+      return true;
+    });
+    const newestPendingTs = pendingItems.reduce((mx, f) => Math.max(mx, factEffectiveTimestamp(f)), 0);
+    const staleCutoffMs = 72 * 3600 * 1000;
+    const activePending = [];
+    const stalePending = [];
+    pendingItems.forEach((fact) => {
+      const ts = factEffectiveTimestamp(fact);
+      if (newestPendingTs > 0 && ts > 0 && newestPendingTs - ts > staleCutoffMs) {
+        stalePending.push(fact);
+      } else {
+        activePending.push(fact);
+      }
+    });
+    const pendingDecs = activePending.filter((fact) => fact.kind === "decision");
+    const pendingAssumps = activePending.filter((fact) => fact.kind === "assumption");
+    if (decisionsCountEl) decisionsCountEl.textContent = activePending.length;
     const sections = [];
     if (pendingDecs.length) {
       sections.push(`<div class="decision-group"><h3 class="decision-group-head">待拍板决策 (${pendingDecs.length})</h3>${pendingDecs.map((fact) => renderDecisionCardHTML(fact, true)).join("")}</div>`);
@@ -1145,9 +1303,15 @@ function render() {
     if (pendingAssumps.length) {
       sections.push(`<div class="decision-group"><h3 class="decision-group-head">未验证前提 (${pendingAssumps.length})</h3>${pendingAssumps.map((fact) => renderDecisionCardHTML(fact, true)).join("")}</div>`);
     }
+    if (stalePending.length) {
+      const batchBtn = !state.data.project?.read_only
+        ? `<div class="in-card-actions"><button type="button" class="mini-btn reject-btn" data-batch-ignore-ids="${esc(stalePending.map((f) => f.id).join(","))}">✕ 一键全部忽略（${stalePending.length} 条）</button></div>`
+        : "";
+      sections.push(`<details class="superseded-todos-fold stale-pending-fold"><summary>更早未处理（${stalePending.length} 条 · 超过 72 小时）</summary><div class="superseded-todos-list">${batchBtn}${stalePending.map((fact) => renderDecisionCardHTML(fact, true)).join("")}</div></details>`);
+    }
     document.getElementById("personal-decision-list").innerHTML = sections.length
       ? sections.join("")
-      : `<p class="empty">当前没有待拍板思路或未验证前提 · 已定案项目基准见下方，或用上方随手记快速新增。</p>`;
+      : `<p class="empty">当前没有待确认想法或待核实前提 · 已定基准见下方，或用上方随手记快速新增。</p>`;
   } else {
     if (decisionsCountEl) decisionsCountEl.textContent = allDecisions.length;
     document.getElementById("personal-decision-list").innerHTML = allDecisions.length
@@ -1174,6 +1338,17 @@ function render() {
         : `<p class="empty">尚无已定案项目基准 · 可在上方面板点击「✓ 定案基准」或在随手记勾选「直接定案为基准」。</p>`;
     }
   }
+  const dispatchSurface = document.getElementById("priority-dispatch-surface");
+  const dispatchList = document.getElementById("priority-dispatch-list");
+  const dispatchCount = document.getElementById("priority-dispatch-count");
+  if (dispatchSurface && dispatchList) {
+    const dispatches = Array.isArray(state.data?.priority_dispatches) ? state.data.priority_dispatches : [];
+    dispatchSurface.hidden = dispatches.length === 0;
+    if (dispatchCount) dispatchCount.textContent = dispatches.length;
+    dispatchList.innerHTML = dispatches.length
+      ? dispatches.map((item) => `<div class="decision-item priority-dispatch-item"><strong>⚡ ${esc(item.title || "优先推进事项")}</strong><span>${esc(item.value || "")}</span><small>派发人：${esc(item.actor || "owner")} · ${esc(formatTime(item.observed_at))}</small><div class="card-pill-row">${renderEvPills(item.evidence_ids)}</div></div>`).join("")
+      : "";
+  }
   const reviewQueue = filterByChapter(state.data.team_review_queue || []);
   const reviewSurface = document.getElementById("team-review-queue");
   reviewSurface.hidden = state.lens !== "team" || (isSolo && reviewQueue.length === 0);
@@ -1189,10 +1364,10 @@ function render() {
           const rejectBtn = qStatus === "rejected" ? "" : `<button type="button" class="mini-btn reject-btn" data-inline-review="reject_fact" data-target-id="${esc(item.fact_id)}" title="驳回">✕ 驳回</button>`;
           inlineTriage = (acceptBtn || rejectBtn) ? `<span class="in-card-actions">${acceptBtn}${rejectBtn}</span>` : "";
         }
-        return `<div class="review-queue-item" role="button" tabindex="0" data-fact-id="${esc(item.fact_id)}">${renderStatusBadge(item.status, item.status === "conflicted" ? "冲突" : item.status === "needs_evidence" ? "补证据" : "待确认")}<span class="review-queue-main"><strong>${esc(item.value)}</strong><small>${esc(item.reason)} · ${esc(item.author || "作者未提供")} · ${item.evidence_count} 条证据 · ${item.candidate_relation_count} 条候选关系</small><span class="card-pill-row">${renderEvPills(qFact?.evidence_ids)}</span>${inlineTriage}</span></div>`;
+        return `<div class="review-queue-item" role="button" tabindex="0" data-fact-id="${esc(item.fact_id)}">${renderStatusBadge(item.status, item.status === "conflicted" ? "冲突" : item.status === "needs_evidence" ? "补证据" : "待确认")}<span class="review-queue-main"><strong>${esc(item.value)}</strong><small>${esc(item.reason)} · ${esc(item.author || "作者未提供")} · ${item.evidence_count} 条证据 · ${item.candidate_relation_count} 条待核对关联</small><span class="card-pill-row">${renderEvPills(qFact?.evidence_ids)}</span>${inlineTriage}</span></div>`;
       }).join("")
     : `<p class="empty">${isSolo ? "当前没有待定案条目。" : "当前没有待负责人核对的团队事实。"}</p>`;
-  document.getElementById("fact-list").innerHTML = facts.length ? facts.map((fact) => factCard(fact, relations)).join("") : `<p class="empty">当前视图还没有结构化事实。原始材料仍可在证据脊柱中查看。</p>`;
+  document.getElementById("fact-list").innerHTML = facts.length ? facts.map((fact) => factCard(fact, relations)).join("") : `<p class="empty">当前视图还没有结构化事实。原始记录仍可在原始记录列表中查看。</p>`;
   renderTrace(facts, relations, evidence);
   renderDirections(view.directions || {candidates:[],current:[],history:[]}, state.lens === "team");
   renderReasonPreview();
@@ -1322,8 +1497,10 @@ function renderIntake() {
     const hhmm = parsed && !Number.isNaN(parsed.getTime())
       ? `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`
       : "";
-    syncEl.hidden = !hhmm;
-    syncEl.textContent = hhmm ? `· 同步 ${hhmm}` : "";
+    const intakePart = !sample && intake?.enabled ? `已同步对话 ${intake.captured_messages || 0} 条` : "";
+    const parts = [intakePart, hhmm ? `同步 ${hhmm}` : ""].filter(Boolean);
+    syncEl.hidden = parts.length === 0;
+    syncEl.textContent = parts.length ? `· ${parts.join(" · ")}` : "";
   }
   document.getElementById("intake-bar").hidden = !sample && !intake?.enabled && !api?.enabled && !ruleScan?.enabled && !userScan?.enabled;
   document.getElementById("refresh-intake").hidden = sample;
@@ -1331,7 +1508,8 @@ function renderIntake() {
     document.getElementById("intake-status").textContent = "合成样例供试用。包含两名成员和一组冲突，审核仅保存在独立样例工作区，不代表真实项目验收或赞助服务已连接。";
     return;
   }
-  const apiNote = api?.enabled ? `Agent HTTP 已启用 · ${api.clients?.length || 0} 个 Agent 上下文可提交证据与候选。` : '';
+  const clientLabels = (api?.clients || []).map((c) => (c?.role_label ? `${c.member_id}(${c.role_label})` : c?.member_id)).filter(Boolean);
+  const apiNote = api?.enabled ? `Agent HTTP 已启用 · ${api.clients?.length || 0} 个 Agent 席位${clientLabels.length ? `（${clientLabels.join("、")}）` : ""}可提交证据与候选。` : '';
   const ruleNote = ruleScan?.enabled ? `方向规则已扫 ${ruleScan.completed_sources}/${ruleScan.eligible_sources} 条${ruleScan.pending_sources ? `（仍有 ${ruleScan.pending_sources} 条待扫）` : ''}。` : '';
   const userNote = userScan?.enabled ? `用户任务规则已扫 ${userScan.completed_sources}/${userScan.eligible_sources} 条${userScan.pending_sources ? `（仍有 ${userScan.pending_sources} 条待扫）` : ''}${userScan.skipped_long_sources ? `，${userScan.skipped_long_sources} 条长消息保留原文` : ''}。` : '';
   const scopeNote = (ruleScan?.enabled || userScan?.enabled) ? '规则仅匹配明确短句，不含深度语义提取。' : '';
@@ -1354,27 +1532,48 @@ function invalidateInvestigation(message) {
   panel.innerHTML = `<p class="empty">${esc(message)}</p>`;
 }
 
-async function refreshNative() {
+async function refreshNative(options = {}) {
   if (!state.data || state.data.sample_mode === true || state.data.project?.read_only || state.refreshing) return;
   state.refreshing = true;
   const refreshBtn = document.getElementById("refresh-intake");
   if (refreshBtn) refreshBtn.disabled = true;
   try {
-    const useRefresh = Boolean(state.data.intake?.enabled || state.data.intake?.direction_scan?.enabled || state.data.intake?.user_task_scan?.enabled);
+    const useRefresh = state.data.intake?.refreshable !== false && Boolean(state.data.intake?.enabled || state.data.intake?.direction_scan?.enabled || state.data.intake?.user_task_scan?.enabled);
+    const supportsDelta = typeof state.data.intake?.refreshable === "boolean" && Number.isInteger(state.data.state_version);
+    const deltaQuery = (options?.backgroundPoll === true && supportsDelta)
+      ? `?since_version=${encodeURIComponent(state.data.state_version)}`
+      : "";
     const payload = useRefresh
-      ? await apiFetch("/api/refresh", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"})
-      : await apiFetch("/api/state", { background: true });
+      ? await apiFetch(`/api/refresh${deltaQuery}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"})
+      : await apiFetch(`/api/state${deltaQuery}`, { background: true });
     if (olderState(payload)) return;
+    const prevHintSig = `${state.data.hint_generation || 0}:${(state.data.agent_hints || []).map((h) => h.id).join(",")}`;
+    const nextHintSig = `${payload.hint_generation || 0}:${(payload.agent_hints || []).map((h) => h.id).join(",")}`;
+    if (payload?.unchanged === true) {
+      if (payload.intake) state.data.intake = payload.intake;
+      if (payload.project_scan) state.data.project_scan = payload.project_scan;
+      if (payload.extraction) state.data.extraction = payload.extraction;
+      if (payload.llm_status) state.data.llm_status = payload.llm_status;
+      renderIntake();
+      renderExtraction();
+      if (nextHintSig !== prevHintSig) {
+        state.data.agent_hints = payload.agent_hints;
+        state.data.hint_generation = payload.hint_generation;
+        renderAgentHints(effectiveWorkMode() === "solo");
+        bindDynamicControls();
+      }
+      return;
+    }
     const prevActSig = `${state.data.activity_stream?.[0]?.id || ""}:${state.data.activity_stream?.length || 0}`;
     const nextActSig = `${payload.activity_stream?.[0]?.id || ""}:${payload.activity_stream?.length || 0}`;
     const evidenceChanged = payload.project.evidence_count !== state.data.project.evidence_count;
     const reviewChanged = (payload.review_history?.length || 0) !== (state.data.review_history?.length || 0);
+    const dispatchChanged = (payload.priority_dispatches?.length || 0) !== (state.data.priority_dispatches?.length || 0);
     const candidatesChanged = payload.project.fact_count !== state.data.project.fact_count;
+    const projectSwitched = Boolean(payload.project?.project_id && state.data.project?.project_id && payload.project.project_id !== state.data.project.project_id);
     const versionChanged = payload.state_version !== state.data.state_version;
     const activityChanged = prevActSig !== nextActSig;
-    const prevHintSig = `${state.data.hint_generation || 0}:${(state.data.agent_hints || []).map((h) => h.id).join(",")}`;
-    const nextHintSig = `${payload.hint_generation || 0}:${(payload.agent_hints || []).map((h) => h.id).join(",")}`;
-    if (evidenceChanged || reviewChanged || candidatesChanged || versionChanged || activityChanged) {
+    if (projectSwitched || evidenceChanged || reviewChanged || dispatchChanged || candidatesChanged || versionChanged || activityChanged) {
       const prevIds = collectFactIdSet(state.data);
       const nextIds = collectFactIdSet(payload);
       const newlyAdded = [...nextIds].filter((id) => !prevIds.has(id));
@@ -1388,8 +1587,16 @@ async function refreshNative() {
         }, 4000);
       }
       state.data = payload;
+      if (projectSwitched && payload.project?.project_id) {
+        state.projectId = payload.project.project_id;
+        state.activeWorkspaceUri = payload.project.path || state.activeWorkspaceUri;
+        state.evidenceCache = Object.create(null);
+      }
       render();
-      invalidateInvestigation(candidatesChanged ? "新候选已更新，原始材料和负责人确认记录保留，请重新提问。" : evidenceChanged ? payload.intake?.new_tool_records ? "已接入工具记录，原有事实与确认历史保留，请重新提问。" : "已接入新消息。原有事实与确认记录保留，新材料需提取后再重新调查。" : "项目状态或负责人确认记录已更新，请重新提问以使用最新状态。");
+      if (projectSwitched) {
+        showCompassToast?.("检测到工作区切换，已自动同步当前项目");
+      }
+      invalidateInvestigation(projectSwitched ? "检测到工作区切换，请重新提问以使用新项目状态。" : candidatesChanged ? "新候选已更新，原始材料和负责人确认记录保留，请重新提问。" : evidenceChanged ? payload.intake?.new_tool_records ? "已接入工具记录，原有事实与确认历史保留，请重新提问。" : "已接入新消息。原有事实与确认记录保留，新材料需提取后再重新调查。" : "项目状态或负责人确认记录已更新，请重新提问以使用最新状态。");
     } else {
       state.data.intake = payload.intake;
       state.data.extraction = payload.extraction;
@@ -1675,7 +1882,7 @@ function renderSpeculativeDetail(fact) {
   if (!fact || !fact.speculative_verified) return "";
   const ids = Array.isArray(fact.evidence_ids) ? fact.evidence_ids.filter(Boolean) : [];
   const pills = ids.length ? `<div class="card-pill-row">${renderEvPills(ids)}</div>` : `<p class="empty">当前缺少可直接跳转的测试证据 ID（证据缺口）。</p>`;
-  const note = ids.length ? "关联测试记录退出码为 0（仅证明该次执行记录通过，请点击上方证据核对覆盖范围）" : "存在投机校验标记，但未附带可溯源测试证据 ID";
+  const note = ids.length ? "关联测试记录退出码为 0（仅证明该次执行记录通过，请点击上方证据核对覆盖范围）" : "关联测试曾通过，但未附带可溯源测试证据 ID";
   return `<div class="detail-block"><div class="detail-label">校验与证据关联</div><div class="detail-value">${esc(note)}</div>${pills}</div>`;
 }
 
@@ -1698,7 +1905,8 @@ function factCard(fact, relations) {
   const badgeHtml = superseder
     ? renderStatusBadge("superseded", "已由新定案接替")
     : renderStatusBadge(currentStatus);
-  return `<div class="fact-card" role="button" tabindex="0" data-fact-id="${esc(fact.id)}"><div class="fact-main"><div class="fact-kind">${esc(label(fact.kind))}${verifiedBadge}</div><div class="fact-value">${esc(fact.value)}</div><div class="fact-meta">${esc(claimLabel(fact.claim_type))}${author} · ${related.length} 条关联</div><div class="fact-meta">${sourceTimeHTML(fact)}${effectiveStatus === 'accepted' || superseder ? '' : ' · 当前有效性待核对'}</div>${conflictHint}${directionStateText(fact) ? `<div class="fact-meta">${esc(directionStateText(fact))}</div>` : ''}${sourceNote(fact) ? `<p class="source-warning">${esc(sourceNote(fact))} · 原记录保留</p>` : ""}</div>${badgeHtml}</div>`;
+  const causalChips = renderCausalChipStripHTML(fact);
+  return `<div class="fact-card" role="button" tabindex="0" data-fact-id="${esc(fact.id)}"><div class="fact-main"><div class="fact-kind">${esc(label(fact.kind))}${verifiedBadge}</div><div class="fact-value">${esc(fact.value)}</div><div class="fact-meta">${esc(claimLabel(fact.claim_type))}${author} · ${related.length} 条关联</div><div class="fact-meta">${sourceTimeHTML(fact)}${effectiveStatus === 'accepted' || superseder ? '' : ' · 当前有效性待核对'}</div>${conflictHint}${causalChips}${directionStateText(fact) ? `<div class="fact-meta">${esc(directionStateText(fact))}</div>` : ''}${sourceNote(fact) ? `<p class="source-warning">${esc(sourceNote(fact))} · 原记录保留</p>` : ""}</div>${badgeHtml}</div>`;
 }
 
 function renderTeamHistory() {
@@ -1741,6 +1949,7 @@ function renderTeamHistory() {
     restore_direction: "恢复方向",
     reject_fact: isSolo ? "暂不采纳" : "拒绝候选",
     request_evidence: "标记待补证据",
+    complete_fact: "标记已完成",
   };
   document.getElementById("history-list").innerHTML = history.length ? `<div class="history-label">${isSolo ? "定案记录" : "审核历史"}</div>${history.map((entry) => `<div class="history-item"><strong>${esc(actionLabels[entry.action] || entry.action)}</strong><span>${esc(entry.value || entry.fact_id || entry.relation_id || "")} · ${esc(entry.reviewer || "owner")} · ${entry.evidence_ids?.length || 0} 条证据 · ${esc(formatTime(entry.observed_at))}${entry.evidence_request_id ? " · 已处理补证请求" : ""}${entry.resolved_relation_ids?.length ? ` · ${entry.resolved_relation_ids.length} 条关系已确认` : ""}${entry.note ? ` · ${esc(entry.note)}` : ""}</span></div>`).join("")}` : "";
 }
@@ -1767,7 +1976,7 @@ function renderTimelineAndThinkingLine(view, facts) {
   const reversals = thinking.reversals || [];
   if (revBadge) {
     revBadge.hidden = reversals.length === 0;
-    revBadge.textContent = `${reversals.length} 处来源换版需复核`;
+    revBadge.textContent = `${reversals.length} 处原文件已更新，请核对`;
   }
 
   chaptersEl.innerHTML = chapters.length ? chapters.map((ch, idx) => {
@@ -1780,7 +1989,7 @@ function renderTimelineAndThinkingLine(view, facts) {
     </button>${arrow}`;
   }).join("") : `<p class="empty">暂无阶段时间轴数据。</p>`;
 
-  const root = thinking.root || { label: "核心目标待定锚", status: "empty", evidence_ids: [] };
+  const root = thinking.root || { label: "核心目标待确定", status: "empty", evidence_ids: [] };
   const rootStatus = root.fact_id ? resolveFactStatus({ id: root.fact_id, status: root.status }) : (root.status || "empty");
   const branches = thinking.branches || [];
   const codeNodes = thinking.code_nodes || [];
@@ -1792,8 +2001,20 @@ function renderTimelineAndThinkingLine(view, facts) {
     const icon = b.state === "abandoned" ? "✕" : b.state === "deferred" ? "⏸" : branchStatus === "accepted" ? "✓" : "◆";
     const freshCls = state.freshFactIds?.has?.(b.fact_id) ? " is-fresh-node" : "";
     const stateClass = (isDropped ? "branch-dropped" : branchStatus === "accepted" ? "branch-accepted" : "branch-proposed") + freshCls;
-    const kindText = b.kind === "assumption" ? "未验证前提" : "决策";
-    const tagText = b.state === "abandoned" ? "已舍弃" : b.state === "deferred" ? "已暂缓" : branchStatus === "accepted" ? (isSolo ? "已定案基准" : "团队共识") : (isSolo ? "待定思路" : "候选状态");
+    const kindText = b.kind === "assumption" ? "前提" : b.causal_stage === "rejected_path" ? "排除路线" : "决策";
+    const tagText = b.causal_stage === "rejected_path" ? "已排除" : b.state === "abandoned" ? "已舍弃" : b.state === "deferred" ? "已暂缓" : branchStatus === "accepted" ? (isSolo ? "已定案" : "团队共识") : (isSolo ? "待拍板" : "待核对");
+    const causalChips = [];
+    if (b.causal_stage === "open_fork" && (b.fork_count || 0) >= 2) {
+      causalChips.push(`<span class="causal-chip is-fork">多选 · ${esc(b.fork_count)}</span>`);
+    }
+    if (b.premise_state === "invalidated") {
+      causalChips.push('<span class="causal-chip is-premise-bad">前提不成立</span>');
+    } else if (b.premise_state === "unverified") {
+      causalChips.push('<span class="causal-chip is-premise">前提待核实</span>');
+    } else if (b.premise_state === "verified") {
+      causalChips.push('<span class="causal-chip is-premise-ok">前提已核实</span>');
+    }
+    const causalChipsHTML = causalChips.join("");
     const canQuickAccept = Boolean(b.fact_id && !state.data?.project?.read_only && branchStatus !== "accepted" && !isDropped && (isSolo || state.lens === "team"));
     const quickAction = canQuickAccept
       ? `<div class="thinking-branch-actions"><button type="button" class="mini-btn accept-btn" data-inline-review="accept_fact" data-target-id="${esc(b.fact_id)}">${isSolo ? "✓ 定案" : "✓ 确认"}</button></div>`
@@ -1816,6 +2037,7 @@ function renderTimelineAndThinkingLine(view, facts) {
           <span class="branch-kind-chip">${kindText}</span>
           <span class="branch-tag ${stateClass}">${tagText}</span>
           <strong class="branch-label">${esc(b.label)}</strong>
+          ${causalChipsHTML}
           ${renderEvPills(b.evidence_ids)}
         </div>
         ${quickAction}
@@ -1838,7 +2060,7 @@ function renderTimelineAndThinkingLine(view, facts) {
 
   canvasEl.innerHTML = `<div class="thinking-tree mindmap-layout">
     <div class="thinking-root ${rootStatus === "accepted" ? "accepted" : "proposed"}${rootFresh}" ${root.fact_id ? `role="button" tabindex="0" data-fact-id="${esc(root.fact_id)}"` : ""} title="${esc(root.full_label || root.label)}">
-      <span class="thinking-root-kicker">核心目标锚点 · ${rootStatusTag}</span>
+      <span class="thinking-root-kicker">核心目标 · ${rootStatusTag}</span>
       <strong class="thinking-root-title">${esc(root.label)}</strong>
       <div class="card-pill-row">${renderEvPills(root.evidence_ids)}</div>
     </div>
@@ -2058,11 +2280,13 @@ function renderSessionPresence() {
     container.innerHTML = "";
     return;
   }
-  const presence = state.data?.session_presence;
-  if (!presence) {
+  const rawPresence = state.data?.session_presence;
+  const apiClients = state.data?.agent_api?.enabled ? (state.data.agent_api.clients || []) : [];
+  if (!rawPresence && !apiClients.length) {
     container.innerHTML = "";
     return;
   }
+  const presence = rawPresence || { team: { accepted_count: 0, pending_count: 0 }, members: [] };
   const isTeamActive = state.lens === "team";
   const teamPending = Number(presence.team?.pending_count) || 0;
   const teamAccepted = Number(presence.team?.accepted_count) || 0;
@@ -2070,14 +2294,38 @@ function renderSessionPresence() {
   const teamBadgeClass = teamAccepted > 0 ? "accepted-count" : "zero-count";
   const teamPill = `<button type="button" class="presence-pill ${isTeamActive ? 'active' : ''}" data-target-lens="team" title="切换到团队共识视图"><span class="presence-name">团队共识</span><span class="presence-badge ${teamBadgeClass}" title="${teamAccepted} 条已确认事实">${teamAccepted}</span>${teamPending > 0 ? `<span class="presence-badge pending-count" title="${teamPending} 条待核对候选">${teamPending} 待审核</span>` : ''}</button>`;
 
-  const memberPills = (presence.members || []).map((m) => {
+  const roleMap = getClientRoleMap();
+  const seenMembers = new Set();
+  const mergedMembers = [];
+  (presence.members || []).forEach((m) => {
+    if (m?.member_id) {
+      seenMembers.add(m.member_id);
+      mergedMembers.push(m);
+    }
+  });
+  (state.data?.agent_api?.clients || []).forEach((c) => {
+    if (c?.member_id && !seenMembers.has(c.member_id)) {
+      seenMembers.add(c.member_id);
+      mergedMembers.push({
+        member_id: c.member_id,
+        label: c.member_id,
+        is_agent_session: true,
+        pending_count: 0,
+      });
+    }
+  });
+
+  const memberPills = mergedMembers.map((m) => {
     const isMemberActive = state.lens === "personal" && state.member === m.member_id;
     const pulseClass = m.is_agent_session ? "agent-pulse" : "agent-pulse doc";
     const mPending = Number(m.pending_count) || 0;
+    const roleLabel = roleMap.get(m.member_id) || "";
+    const roleBadge = roleLabel ? `<span class="presence-role">${esc(roleLabel)}</span>` : "";
     const statusTag = mPending > 0
       ? `<span class="presence-badge pending-count" title="${mPending} 条待审核候选">${mPending}</span>`
       : `<span class="presence-badge zero-count" title="无待审候选">✓</span>`;
-    return `<button type="button" class="presence-pill ${isMemberActive ? 'active' : ''}" data-target-lens="personal" data-target-member="${esc(m.member_id)}" title="切换到 ${esc(m.label)} 视图"><span class="${pulseClass}"></span><span class="presence-name">${esc(m.label)}</span>${statusTag}</button>`;
+    const pillTitle = roleLabel ? `切换到 ${m.label}（${roleLabel}）视图` : `切换到 ${m.label} 视图`;
+    return `<button type="button" class="presence-pill ${isMemberActive ? 'active' : ''}" data-target-lens="personal" data-target-member="${esc(m.member_id)}" title="${esc(pillTitle)}"><span class="${pulseClass}"></span><span class="presence-name">${esc(m.label)}</span>${roleBadge}${statusTag}</button>`;
   }).join("");
 
   container.innerHTML = teamPill + memberPills;
@@ -2358,6 +2606,8 @@ function bindDynamicControls() {
         openAnchorInlineForm("next_step", document.getElementById("next-consensus-title")?.textContent || "");
       } else if (action === "accept_fact" && factId) {
         acceptFact(factId, "accept_fact", { fromDrawer: false });
+      } else if (action === "open_fact" && factId) {
+        openFact(factId);
       } else if (action === "open_evidence" && evId) {
         openEvidence(evId);
       }
@@ -2380,13 +2630,32 @@ function bindDynamicControls() {
       }
     };
   });
+  document.querySelectorAll("[data-batch-ignore-ids]").forEach((button) => {
+    button.onclick = (event) => {
+      event?.stopPropagation?.();
+      event?.preventDefault?.();
+      batchIgnoreFacts(button.dataset.batchIgnoreIds);
+    };
+  });
+  document.querySelectorAll("[data-dispatch-fact]").forEach((button) => {
+    button.onclick = (event) => {
+      event?.stopPropagation?.();
+      event?.preventDefault?.();
+      dispatchFact(button.dataset.dispatchFact, { fromDrawer: false });
+    };
+    button.onkeydown = (event) => {
+      if (event?.key === "Enter" || event?.key === " ") {
+        event.stopPropagation?.();
+      }
+    };
+  });
   document.querySelectorAll("[data-fact-id]").forEach((el) => {
     if (el?.dataset?.reviewId) return;
     if (typeof el?.hasAttribute === "function" && el.hasAttribute("data-review-id")) return;
     if (typeof el?.closest === "function" && el.closest("#evidence-drawer")) return;
     el.onclick = (event) => {
       if (event?.target && event.target !== el && typeof event.target.closest === "function") {
-        const hit = event.target.closest("[data-inline-review], [data-evidence-id], button, a, input, textarea");
+        const hit = event.target.closest("[data-inline-review], [data-dispatch-fact], [data-evidence-id], button, a, input, textarea");
         if (hit && hit !== el) return;
       }
       openFact(el.dataset.factId);
@@ -2436,6 +2705,15 @@ function bindDrawerControls() {
   drawer.querySelectorAll("[data-fact-review-id]").forEach((button) => {
     button.onclick = () => acceptFact(button.dataset.factReviewId, button.dataset.reviewAction || "accept_fact", { fromDrawer: true });
   });
+  drawer.querySelectorAll("[data-dispatch-fact]").forEach((button) => {
+    button.onclick = () => dispatchFact(button.dataset.dispatchFact, { fromDrawer: true });
+  });
+  drawer.querySelectorAll("[data-dispatch-fact-target]").forEach((button) => {
+    button.onclick = () => dispatchFact(button.dataset.factId, {
+      fromDrawer: true,
+      sidecarTarget: button.dataset.dispatchFactTarget,
+    });
+  });
   drawer.querySelectorAll("[data-direction-review-id]").forEach((button) => {
     button.onclick = () => acceptFact(button.dataset.directionReviewId, button.dataset.directionAction, { fromDrawer: true });
   });
@@ -2459,7 +2737,18 @@ function bindDrawerControls() {
     closeDrawer();
     if (!pending) return;
     if (pending.type === "accept_fact") {
-      await acceptFact(pending.factId, pending.action, { fromDrawer: pending.fromDrawer, signer: signerName });
+      await acceptFact(pending.factId, pending.action, {
+        fromDrawer: pending.fromDrawer,
+        signer: signerName,
+        note: pending.note,
+      });
+    } else if (pending.type === "dispatch_fact") {
+      await dispatchFact(pending.factId, {
+        fromDrawer: pending.fromDrawer,
+        signer: signerName,
+        sidecarTarget: pending.sidecarTarget,
+        note: pending.note,
+      });
     } else if (pending.type === "confirm_relation") {
       await confirmRelation(pending.relationId, pending.factId, { signer: signerName });
     } else if (pending.type === "quick_note") {
@@ -2525,38 +2814,212 @@ function openFact(factId) {
   const requestBtn = effectiveStatus === "needs_evidence" ? "" : `<button type="button" class="review-action" data-fact-review-id="${esc(fact.id)}" data-review-action="request_evidence">要求补证据</button>`;
   const reviewActions = canConfirmHere && !superseder && effectiveStatus !== "accepted" ? `<label class="review-note-label" for="review-note">备注说明（可选）</label><textarea id="review-note" class="review-note-input" rows="2" placeholder="${isSolo ? "定案补充说明或后续待补证据" : "拒绝原因或缺少的具体证据"}"></textarea>${rejectBtn}${requestBtn}` : "";
   const confirmLabel = isSolo && state.lens === "personal" ? "定案为项目基准" : "确认为团队事实";
-  const acceptAction = state.data.project?.read_only ? `<p class="empty">当前项目为只读预览，确认操作请回到该项目的运行窗口。</p>` : superseder ? `<p class="meta-note">本条旧记录已被更新的定案接替，仅作历史保留。</p>` : !sourceCurrent(fact) ? `<p class="source-warning">${esc(sourceNote(fact))} · 请核对当前来源。原确认与证据仍保留。</p>` : canConfirmHere && directionAction ? directionAction : canConfirmHere && effectiveStatus !== "accepted" ? `<button type="button" class="review-action" data-fact-review-id="${esc(fact.id)}">${confirmLabel}</button>${reviewActions}` : reviewActions;
+  const inSidecar = hasSidecarBridge();
+  const canSidecarSend = inSidecar && typeof window.sidecar?.agent?.sendMessage === "function";
+  const canSidecarNew = inSidecar && typeof window.sidecar?.agent?.startConversation === "function";
+  const dispatchBtn = !state.data.project?.read_only && !superseder && sourceCurrent(fact) && effectiveStatus !== "rejected"
+    ? `<button type="button" class="review-action dispatch-btn" data-dispatch-fact="${esc(fact.id)}">✓ 确认并交给 AI</button>`
+    : "";
+  const sidecarDispatchBtns = dispatchBtn
+    ? `${canSidecarSend ? `<button type="button" class="review-action sidecar-dispatch-btn" data-dispatch-fact-target="send" data-fact-id="${esc(fact.id)}">立即发入当前对话</button>` : ""}${canSidecarNew ? `<button type="button" class="review-action sidecar-dispatch-btn" data-dispatch-fact-target="new" data-fact-id="${esc(fact.id)}">新开窗口专办</button>` : ""}`
+    : "";
+  const fullDispatchBtns = `${dispatchBtn}${sidecarDispatchBtns}`;
+  const acceptAction = state.data.project?.read_only ? `<p class="empty">当前项目为只读预览，确认操作请回到该项目的运行窗口。</p>` : superseder ? `<p class="meta-note">本条旧记录已被更新的定案接替，仅作历史保留。</p>` : !sourceCurrent(fact) ? `<p class="source-warning">${esc(sourceNote(fact))} · 请核对当前来源。原确认与证据仍保留。</p>` : canConfirmHere && directionAction ? `${directionAction}${fullDispatchBtns}` : canConfirmHere && effectiveStatus !== "accepted" ? `<button type="button" class="review-action" data-fact-review-id="${esc(fact.id)}">${confirmLabel}</button>${fullDispatchBtns}${reviewActions}` : `${fullDispatchBtns}${reviewActions}`;
   const verifiedBlock = renderSpeculativeDetail(fact);
+  const causalDrawerBlock = renderCausalDrawerSectionHTML(fact);
   const displayStatusText = superseder ? "已由新定案接替" : statusLabel(effectiveStatus);
   const drawerTitle = cleanUiText(fact.short_title || fact.clean_value || fact.value);
-  openDrawer(drawerTitle, `${comparisonBlock}<div class="detail-block"><div class="detail-value">${sourceTimeHTML(fact)}</div><p class="${effectiveStatus === "accepted" ? "reviewed-note" : "meta-note"}">${esc(fact.author || "记录者")} · ${effectiveStatus === "accepted" ? (isSolo ? "已拍板定案，来源版本仍可核对" : "负责人已确认，来源版本仍可核对") : superseder ? "已由更晚定案接替" : "当前有效性待核对"}</p></div><div class="detail-block"><div class="detail-label">当前状态与范围</div><div class="detail-value">${esc(displayStatusText)} · 归属：${esc(subjectKeyLabel(fact.subject_key))}</div>${acceptAction}</div>${verifiedBlock}<div class="detail-block"><div class="detail-label">证据关联</div>${relations.length ? relations.map((relation) => `<div class="relation-item"><button type="button" class="evidence-item" data-evidence-id="${esc(relation.evidence_id)}"><span class="evidence-dot ${relation.status === "confirmed" ? "fact_source" : "execution_result"}"></span><span><span class="evidence-title">${esc(relation.basis)}</span><span class="evidence-meta">${esc(relationMethodLabel(relation.method))} · ${esc(statusLabel(relation.status))} · ${relation.score == null ? "评分未知" : `匹配度 ${esc(relation.score)}`}</span></span><span class="evidence-links">打开</span></button>${relation.status === "candidate" ? (state.data.project?.read_only ? `<span class="meta-note">只读预览，关联关系待主项目确认</span>` : `<button type="button" class="review-action" data-review-id="${esc(relation.id)}" data-fact-id="${esc(fact.id)}">确认支持关系</button>`) : `<span class="reviewed-note">${isSolo ? "已定案关联" : "负责人已确认"}</span>`}</div>`).join("") : `<p class="empty">暂未提出关联关系。</p>`}</div><div class="detail-block"><div class="detail-label">依据原文</div><div class="card-pill-row">${ids.map((eid) => `<button type="button" class="answer-evidence" data-evidence-id="${esc(eid)}">${esc(eid)}</button>`).join("") || "证据缺口"}</div></div><details class="answer-footnotes raw-meta-fold"><summary>底层技术字段（排障核对用 · 默认折叠）</summary><div class="meta-note">记录编号：${esc(fact.id)} · 会话标识：${esc(fact.session_id || "未提供")} · 位置键：${esc(fact.subject_key || "")}</div></details>`);
+  openDrawer(drawerTitle, `${comparisonBlock}${causalDrawerBlock}<div class="detail-block"><div class="detail-value">${sourceTimeHTML(fact)}</div><p class="${effectiveStatus === "accepted" ? "reviewed-note" : "meta-note"}">${esc(fact.author || "记录者")} · ${effectiveStatus === "accepted" ? (isSolo ? "已拍板定案，来源版本仍可核对" : "负责人已确认，来源版本仍可核对") : superseder ? "已由更晚定案接替" : "当前有效性待核对"}</p></div><div class="detail-block"><div class="detail-label">当前状态与范围</div><div class="detail-value">${esc(displayStatusText)} · 归属：${esc(subjectKeyLabel(fact.subject_key))}</div>${acceptAction}</div>${verifiedBlock}<div class="detail-block"><div class="detail-label">证据关联</div>${relations.length ? relations.map((relation) => `<div class="relation-item"><button type="button" class="evidence-item" data-evidence-id="${esc(relation.evidence_id)}"><span class="evidence-dot ${relation.status === "confirmed" ? "fact_source" : "execution_result"}"></span><span><span class="evidence-title">${esc(relation.basis)}</span><span class="evidence-meta">${esc(relationMethodLabel(relation.method))} · ${esc(statusLabel(relation.status))} · ${relation.score == null ? "评分未知" : `匹配度 ${esc(relation.score)}`}</span></span><span class="evidence-links">打开</span></button>${relation.status === "candidate" ? (state.data.project?.read_only ? `<span class="meta-note">只读预览，关联关系待主项目确认</span>` : `<button type="button" class="review-action" data-review-id="${esc(relation.id)}" data-fact-id="${esc(fact.id)}">确认支持关系</button>`) : `<span class="reviewed-note">${isSolo ? "已定案关联" : "负责人已确认"}</span>`}</div>`).join("") : `<p class="empty">暂未提出关联关系。</p>`}</div><div class="detail-block"><div class="detail-label">依据原文</div><div class="card-pill-row">${ids.map((eid) => `<button type="button" class="answer-evidence" data-evidence-id="${esc(eid)}">${esc(eid)}</button>`).join("") || "证据缺口"}</div></div><details class="answer-footnotes raw-meta-fold"><summary>底层技术字段（排障核对用 · 默认折叠）</summary><div class="meta-note">记录编号：${esc(fact.id)} · 会话标识：${esc(fact.session_id || "未提供")} · 位置键：${esc(fact.subject_key || "")}</div></details>`);
+}
+
+async function batchIgnoreFacts(rawIds) {
+  if (state.data?.project?.read_only || state.batchIgnorePending) return;
+  const ids = String(rawIds || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!ids.length) return;
+  const reviewer = String(
+    state.data?.agent_api?.owner_id ||
+      document.getElementById("reviewer-input")?.value ||
+      readStorage("compass_reviewer_name") ||
+      "solo"
+  ).trim() || "solo";
+  state.batchIgnorePending = true;
+  let latest = null;
+  let succeeded = 0;
+  let skipped = 0;
+  let failed = 0;
+  let lastErrorMsg = "";
+  try {
+    for (const factId of ids) {
+      try {
+        const payload = await apiFetch("/api/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reject_fact", fact_id: factId, reviewer, note: "超过72小时批量忽略" }),
+        });
+        if (payload && !olderState(payload)) latest = payload;
+        succeeded += 1;
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (msg.includes("already has this review status")) {
+          skipped += 1;
+        } else {
+          failed += 1;
+          lastErrorMsg = msg;
+        }
+      }
+    }
+  } finally {
+    state.batchIgnorePending = false;
+    if (latest && !olderState(latest)) {
+      state.data = latest;
+      render();
+      invalidateInvestigation("已批量忽略更早未处理条目，原始记录仍保留在档案中。");
+    }
+    if (failed === 0 && (succeeded > 0 || skipped > 0)) {
+      showCompassToast?.(`已处理 ${succeeded + skipped} 条更早记录（新忽略 ${succeeded} 条）`);
+    } else if (succeeded > 0 || skipped > 0) {
+      showCompassToast?.(`已忽略 ${succeeded} 条，另有 ${failed} 条失败：${lastErrorMsg || "请重试"}`);
+    } else if (failed > 0) {
+      showCompassToast?.(`批量忽略失败：${lastErrorMsg || "请重试"}`);
+    }
+  }
 }
 
 async function acceptFact(factId, action = "accept_fact", options = {}) {
   if (state.data.project?.read_only) { openDrawer("只读项目", `<p class="empty">当前项目只读，不能执行确认或定案。</p>`); return; }
   const isSolo = effectiveWorkMode() === "solo";
-  const reviewer = String(options?.signer || document.getElementById("reviewer-input")?.value || "").trim();
+  const note = options?.note !== undefined
+    ? String(options.note)
+    : (options?.fromDrawer ? (document.getElementById("review-note")?.value.trim() || "") : "");
+  let reviewer = String(options?.signer || document.getElementById("reviewer-input")?.value || "").trim();
+  if (!reviewer && action === "complete_fact" && isSolo) {
+    reviewer = String(state.data?.agent_api?.owner_id || readStorage("compass_reviewer_name") || "solo").trim() || "solo";
+  }
   if (!reviewer) {
     if (isSolo) {
-      requestInlineSoloSigner({ type: "accept_fact", factId, action, fromDrawer: Boolean(options?.fromDrawer) });
+      requestInlineSoloSigner({ type: "accept_fact", factId, action, fromDrawer: Boolean(options?.fromDrawer), note });
       return;
     }
     openDrawer("署名确认", `<p class="empty">请先填写负责人姓名，再确认事实。</p>`);
     return;
   }
   try {
-    const note = options?.fromDrawer ? (document.getElementById("review-note")?.value.trim() || "") : "";
     const payload = await apiFetch("/api/review", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({action, fact_id: factId, reviewer, note})});
     if (olderState(payload)) return;
     state.data = payload;
     render();
-    invalidateInvestigation("确认记录已更新，请重新提问以使用最新状态。");
+    invalidateInvestigation(action === "complete_fact" ? "已标记为完成，请重新提问以使用最新状态。" : "确认记录已更新，请重新提问以使用最新状态。");
+    if (action === "complete_fact") {
+      showCompassToast?.("已标记为完成，不再作为当前下一步");
+    }
     const drawer = document.getElementById("evidence-drawer");
     if (options?.fromDrawer || (drawer && !drawer.hidden)) {
       openFact(factId);
     }
   } catch (error) {
     openDrawer("确认失败", `<p class="empty">${esc(error.message)}</p>`);
+  }
+}
+
+async function dispatchFact(factId, options = {}) {
+  if (state.data?.project?.read_only) {
+    openDrawer("只读项目", `<p class="empty">当前项目只读，不能写入优先执行列表。</p>`);
+    return;
+  }
+  const teamFact = (state.data?.team?.facts || []).find((item) => item.id === factId);
+  const personalFact = (state.data?.personal?.[state.member]?.facts || []).find((item) => item.id === factId);
+  const fact = state.lens === "team" ? (teamFact || personalFact) : (personalFact || teamFact);
+  if (!fact) return;
+  const isSolo = effectiveWorkMode() === "solo";
+  const effectiveStatus = resolveFactStatus(fact);
+  const reviewNote = options?.note !== undefined
+    ? String(options.note)
+    : (options?.fromDrawer ? (document.getElementById("review-note")?.value.trim() || "") : "");
+  const reviewer = String(
+    options?.signer ||
+      state.data?.agent_api?.owner_id ||
+      document.getElementById("reviewer-input")?.value ||
+      readStorage("compass_reviewer_name") ||
+      ""
+  ).trim();
+  if (effectiveStatus !== "accepted" && !reviewer) {
+    if (isSolo) {
+      requestInlineSoloSigner({
+        type: "dispatch_fact",
+        factId,
+        fromDrawer: Boolean(options?.fromDrawer),
+        sidecarTarget: options?.sidecarTarget || null,
+        note: reviewNote,
+      });
+      return;
+    }
+    openDrawer("署名确认", `<p class="empty">推进定案前，请先在上方填写负责人署名。</p>`);
+    return;
+  }
+  try {
+    if (effectiveStatus !== "accepted") {
+      const reviewPayload = await apiFetch("/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "accept_fact", fact_id: factId, reviewer, note: reviewNote }),
+      });
+      if (reviewPayload && !olderState(reviewPayload)) {
+        state.data = reviewPayload;
+      }
+    }
+    const inSidecar = hasSidecarBridge();
+    const sidecarTarget = String(options?.sidecarTarget || "").trim();
+    const dispatchMode = inSidecar ? (sidecarTarget ? `sidecar_${sidecarTarget}` : "sidecar_pill") : "queue";
+    const title = cleanUiText(fact.short_title || fact.clean_value || fact.value || "").slice(0, 60);
+    const value = cleanUiText(fact.value || title);
+    const evidenceIds = Array.isArray(fact.evidence_ids) ? fact.evidence_ids : [];
+    const actor = reviewer || (isSolo ? "solo" : "owner");
+    const dispatchPayload = await apiFetch("/api/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fact_id: factId,
+        title,
+        value,
+        evidence_ids: evidenceIds,
+        reviewer: actor,
+        mode: dispatchMode,
+        note: reviewNote,
+      }),
+    });
+    if (dispatchPayload && !olderState(dispatchPayload)) {
+      state.data = dispatchPayload;
+    }
+    const brief = formatDispatchBrief(fact);
+    let toastMsg = "";
+    if (inSidecar && sidecarTarget === "send" && typeof window.sidecar.agent?.sendMessage === "function") {
+      await window.sidecar.agent.sendMessage(brief);
+      toastMsg = "已锁定定案并立即发入当前对话";
+    } else if (inSidecar && sidecarTarget === "new" && typeof window.sidecar.agent?.startConversation === "function") {
+      await window.sidecar.agent.startConversation(brief, title || "Compass 任务");
+      toastMsg = "已锁定定案并新开对话窗口专办";
+    } else if (inSidecar && typeof window.sidecar.ui?.addArtifactComment === "function") {
+      window.sidecar.ui.addArtifactComment({
+        uri: state.data?.project?.path || "compass://workbench",
+        comment: brief,
+        pageTitle: title || "Compass 定案推进",
+      });
+      toastMsg = "已锁定定案并挂入左侧输入框胶囊（待你发送）";
+    } else {
+      const copied = await copyTextToClipboard(brief);
+      toastMsg = copied
+        ? "已确认并加入优先执行列表（指令已复制）"
+        : "已确认并加入优先执行列表（请手动复制指令）";
+    }
+    render();
+    invalidateInvestigation("已确认并加入优先执行列表，请重新提问以使用最新状态。");
+    const drawer = document.getElementById("evidence-drawer");
+    if (options?.fromDrawer || (drawer && !drawer.hidden)) {
+      openFact(factId);
+    }
+    showCompassToast(toastMsg);
+  } catch (error) {
+    openDrawer("推进失败", `<p class="empty">${esc(error.message)}</p>`);
   }
 }
 
@@ -2807,7 +3270,7 @@ document.getElementById("rescan-project").addEventListener("click", rescanProjec
 document.getElementById("extract-candidates").addEventListener("click", extractCandidates);
 document.getElementById('trace-start').addEventListener('click', () => jumpTrace(false));
 document.getElementById('trace-latest').addEventListener('click', () => jumpTrace(true));
-setInterval(() => { if (!document.hidden) refreshNative(); }, 3000);
+setInterval(() => { if (!document.hidden) refreshNative({ backgroundPoll: true }); }, 3000);
 document.getElementById("evidence-filter").addEventListener("input", (event) => { state.evidenceQuery = event.target.value; render(); });
 if (typeof document.addEventListener === "function") {
   document.addEventListener("keydown", (event) => {
@@ -2835,4 +3298,107 @@ if (typeof document.addEventListener === "function") {
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("pointermove", handleProximityPrefetch, { passive: true });
 }
-loadState().catch((error) => { document.getElementById("connection-label").textContent = `状态暂不可用：${error.message}`; });
+
+function normalizeWorkspaceComparisonKey(raw) {
+  let text = String(raw || "").trim();
+  if (!text) return "";
+  if (/^file:\/\//i.test(text)) {
+    text = text.replace(/^file:\/\/(?:localhost)?/i, "");
+    try {
+      text = decodeURIComponent(text);
+    } catch (_err) {
+      // Preserve raw string when URI percent-encoding is incomplete.
+    }
+    text = text.replace(/^\/([A-Za-z]:)/, "$1");
+  }
+  text = text.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^[A-Za-z]:\//.test(text)) {
+    text = text.toLowerCase();
+  }
+  return text;
+}
+
+async function activateWorkspaceFromSidecarUris(uris) {
+  if (!Array.isArray(uris) || !uris.length) return;
+  const firstUri = String(uris.find((u) => typeof u === "string" && u.trim()) || "").trim();
+  if (!firstUri) return;
+  if (state.data?.sample_mode === true) return;
+  if (state.sidecarActivating) {
+    if (firstUri === state.inflightWorkspaceUri) {
+      state.pendingWorkspaceUri = "";
+    } else {
+      state.pendingWorkspaceUri = firstUri;
+    }
+    return;
+  }
+  const isReadOnlyPreview = Boolean(state.data?.project?.read_only);
+  if (!isReadOnlyPreview && firstUri === state.activeWorkspaceUri) return;
+  const loadedPath = state.data?.project?.path || "";
+  if (!isReadOnlyPreview && loadedPath && normalizeWorkspaceComparisonKey(firstUri) === normalizeWorkspaceComparisonKey(loadedPath)) {
+    state.activeWorkspaceUri = firstUri;
+    return;
+  }
+  state.sidecarActivating = true;
+  state.inflightWorkspaceUri = firstUri;
+  try {
+    const payload = await apiFetch("/api/projects/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: firstUri }),
+    });
+    if (payload && !olderState(payload)) {
+      state.activeWorkspaceUri = firstUri;
+      const prevId = state.data?.project?.project_id || null;
+      state.data = payload;
+      state.projectId = payload.project?.project_id || null;
+      state.evidenceCache = Object.create(null);
+      state.evidenceRequestSeq = (state.evidenceRequestSeq || 0) + 1;
+      state.activeChapterId = null;
+      state.revision += 1;
+      loadProjects();
+      render();
+      if (prevId && state.projectId && prevId !== state.projectId) {
+        invalidateInvestigation("已跟随左侧窗口切换项目工作区，请重新提问以使用新项目状态。");
+        showCompassToast?.("已自动切换到当前打开的项目工作区");
+      }
+    }
+  } catch (err) {
+    const conn = document.getElementById("connection-label");
+    if (conn) conn.textContent = "工作区切换失败 · 请刷新重试";
+    showCompassToast?.(`切换项目工作区失败：${err?.message || "请重试"}`);
+  } finally {
+    state.sidecarActivating = false;
+    state.inflightWorkspaceUri = "";
+    const queued = String(state.pendingWorkspaceUri || "").trim();
+    state.pendingWorkspaceUri = "";
+    if (queued && queued !== state.activeWorkspaceUri) {
+      activateWorkspaceFromSidecarUris([queued]);
+    }
+  }
+}
+
+function initSidecarBridge() {
+  if (!hasSidecarBridge()) return;
+  if (typeof window.sidecar.onWorkspaceChange === "function") {
+    window.sidecar.onWorkspaceChange((uris) => {
+      activateWorkspaceFromSidecarUris(uris);
+    });
+  }
+  if (typeof window.sidecar.getWorkspaceUris === "function") {
+    Promise.resolve(window.sidecar.getWorkspaceUris())
+      .then((uris) => activateWorkspaceFromSidecarUris(uris))
+      .catch((err) => {
+        const conn = document.getElementById("connection-label");
+        if (conn && !state.data) conn.textContent = `工作区联动暂不可用：${err?.message || "请重试"}`;
+      });
+  }
+}
+
+loadState()
+  .then(() => {
+    initSidecarBridge();
+  })
+  .catch((error) => {
+    const conn = document.getElementById("connection-label");
+    if (conn) conn.textContent = `状态暂不可用：${error.message}`;
+  });

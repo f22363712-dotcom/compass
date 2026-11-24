@@ -303,7 +303,7 @@ def _build_profiles() -> list[dict[str, Any]]:
                 "model": model,
                 "base_url": base_url,
                 "api_key": api_key or ("ollama" if mode == "local_llm" else ""),
-                "provider_label": f"语义增强 · {model}",
+                "provider_label": f"AI 辅助 · {model}",
             }
         )
 

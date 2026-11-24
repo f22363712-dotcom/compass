@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 _LEADING_QUOTE_MENTION_RE = re.compile(r"@\[Quote\]\s*")
+_ASK_UI_PREFIX_RE = re.compile(r"^\s*A\d+:\s*(?:\(Recommended\)\s*)?", re.IGNORECASE)
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _MD_PREFIX_RE = re.compile(r"^\s*(?:>{1,3}|#{1,6}|[-*+]|\d+[.)]|\[[ xX]\])\s*")
 _LEADING_DATE_RE = re.compile(
@@ -20,7 +21,9 @@ _LEADING_DATE_RE = re.compile(
 )
 _LABEL_PREFIX_RE = re.compile(
     r"^(?:project\s+goal|core\s+goal|decision|assumption|task|goal|next\s+step|"
-    r"核心目标|项目目标|核心焦点|关键基准|目标|决策|前提|假设|待办|下一步|状态[：:]\s*开发目标[，,]?)\s*[:：]?\s*",
+    r"核心目标|项目目标|核心焦点|关键基准|目标|决策|"
+    r"(?:前置条件|隐含前提|关键前提|核心假设|当前假设|基本假设|前提条件|前提|假设)(?:是|为|在于)?|"
+    r"待办|下一步|状态[：:]\s*开发目标[，,]?)\s*[:：]?\s*",
     re.IGNORECASE,
 )
 _STATUS_SUFFIX_RE = re.compile(r"\s*\[(?:proposed|accepted|conflicted|rejected|pending|completed)\]\s*$", re.IGNORECASE)
@@ -43,6 +46,7 @@ _STATIC_DOC_REF_FILES = frozenset({
 
 def _strip_markdown_noise(text: str) -> str:
     cleaned = _LEADING_QUOTE_MENTION_RE.sub("", str(text or ""))
+    cleaned = _ASK_UI_PREFIX_RE.sub("", cleaned)
     cleaned = _MD_LINK_RE.sub(r"\1", cleaned)
     for _ in range(3):
         updated = _MD_PREFIX_RE.sub("", cleaned)
@@ -78,7 +82,7 @@ def _smart_truncate(text: str, max_chars: int) -> str:
         last_space = cut.rfind(" ")
         if last_space >= max(4, limit // 2):
             cut = cut[:last_space]
-    cut = cut.rstrip(" ,，、:：;；-—·(")
+    cut = cut.rstrip(" ,，、:：;；-—·(（[「『“\"+/&")
     if not cut:
         cut = text[: limit - 1].rstrip()
     return cut + "…"
@@ -112,13 +116,21 @@ def summarize_node_title(
 
     # Extract concise framed definition phrase (e.g. X 是...「核心定义」：长句展开).
     quoted_match = _QUOTED_PHRASE_RE.search(cleaned[:56])
-    if quoted_match and ("：" in cleaned or ":" in cleaned or "是" in cleaned[: quoted_match.start() + 1]):
-        phrase = quoted_match.group(1).strip()
-        if 6 <= len(phrase) <= max(max_chars, 28):
-            return _smart_truncate(phrase, max_chars)
+    if quoted_match:
+        prefix_before_quote = cleaned[: quoted_match.start()]
+        unclosed_paren = (
+            prefix_before_quote.count("（") > prefix_before_quote.count("）")
+            or prefix_before_quote.count("(") > prefix_before_quote.count(")")
+        )
+        has_colon_before = "：" in prefix_before_quote or ":" in prefix_before_quote
+        has_definitional_intro = any(tok in prefix_before_quote for tok in ("是", "围绕", "打造", "定位"))
+        if not unclosed_paren and not has_colon_before and has_definitional_intro:
+            phrase = quoted_match.group(1).strip()
+            if 6 <= len(phrase) <= max(max_chars, 28):
+                return _smart_truncate(phrase, max_chars)
 
     # Prefer the lead sentence before verbose explanation separators.
-    sentences = re.split(r"(?<=[。！？!?])\s*|(?<=\.)\s+(?=[A-Z\u4e00-\u9fff])|；\s*", cleaned)
+    sentences = re.split(r"(?<=[。！？!?])\s*|(?<=\.)(?<!\d\.)(?<!No\.)(?<!e\.g\.)(?<!i\.e\.)\s+(?=[A-Z\u4e00-\u9fff])|；\s*", cleaned)
     first_clause = next((seg.strip("。；; ") for seg in sentences if seg and seg.strip()), cleaned)
     if len(first_clause) < 5 and len(sentences) > 1:
         second = sentences[1].strip("。；; ")
@@ -126,15 +138,19 @@ def summarize_node_title(
             first_clause = f"{first_clause}：{second}" if first_clause else second
 
     if len(first_clause) > max_chars:
-        for sep in ("：", ":", "——", "（"):
+        for sep in ("：", ":", "——", "（", "("):
             if sep in first_clause:
                 head = first_clause.split(sep, 1)[0].strip()
                 tail = first_clause.split(sep, 1)[1].strip()
-                if len(head) >= max(8, max_chars // 2):
+                if sep in ("：", ":"):
+                    if len(head) >= max(8, max_chars // 2):
+                        first_clause = head
+                        break
+                    if len(head) <= 3 and tail:
+                        first_clause = tail
+                        break
+                elif len(head) >= 8:
                     first_clause = head
-                    break
-                if sep in ("：", ":") and len(head) <= 6 and tail:
-                    first_clause = tail
                     break
 
     return _smart_truncate(first_clause.strip("。；; "), max_chars)
@@ -205,13 +221,13 @@ def select_next_consensus(facts: list[dict[str, Any]]) -> dict[str, Any] | None:
     eligible = [
         f
         for f in (facts or [])
-        if isinstance(f, dict) and f.get("status") != "rejected" and _is_source_current(f)
+        if isinstance(f, dict)
+        and f.get("status") != "rejected"
+        and not f.get("completed")
+        and f.get("task_state") not in {"completed", "reported_complete"}
+        and _is_source_current(f)
     ]
-    open_tasks = [
-        f
-        for f in eligible
-        if f.get("kind") == "task" and f.get("task_state") not in {"completed", "reported_complete"}
-    ]
+    open_tasks = [f for f in eligible if f.get("kind") == "task"]
     for predicate in (
         lambda f: f.get("subject_key") == "project.next_step" and f.get("status") == "accepted",
         lambda f: f.get("status") == "accepted" and not _is_unconfirmed_doc_origin(f),

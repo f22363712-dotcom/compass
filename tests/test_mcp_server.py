@@ -21,8 +21,16 @@ class MCPServerTests(unittest.TestCase):
         listed = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
 
         self.assertEqual(initialized["result"]["protocolVersion"], "2024-11-05")
+        self.assertIn("resources", initialized["result"]["capabilities"])
         self.assertEqual({tool["name"] for tool in listed["result"]["tools"]}, {
-            "project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"
+            "project_context",
+            "append_evidence",
+            "query_state",
+            "propose_fact",
+            "record_note",
+            "verify_completion",
+            "open_compass",
+            "compass_app_action",
         })
 
     def test_tools_call_dispatches_to_local_adapter_and_returns_mcp_content(self):

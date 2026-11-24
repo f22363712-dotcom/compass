@@ -56,7 +56,7 @@ class V13GovernanceAndLLMConnectorTests(unittest.TestCase):
             self.assertEqual(cfg["model"], "MiniMax-M2.7")
             self.assertIn("minimaxi.com", cfg["base_url"])
             pub = public_llm_status()
-            self.assertEqual(pub["provider_label"], "语义增强 · MiniMax-M2.7")
+            self.assertEqual(pub["provider_label"], "AI 辅助 · MiniMax-M2.7")
             self.assertNotIn("api_key", pub)
             self.assertNotIn("base_url", pub)
 

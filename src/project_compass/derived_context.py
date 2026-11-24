@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
+import threading
 from typing import Any
 
 
@@ -183,8 +185,11 @@ class DerivedContext:
             raise DerivedContextError("project id is required")
         if payload.get("project_id") != project_id:
             raise DerivedContextError("derived context project mismatch")
+        resolved_root = Path(project_root).expanduser().resolve() if project_root is not None else None
+        validated_refs: set[str] = set()
         source_ref = _bounded_text(payload.get("source_ref"), "source_ref", MAX_SOURCE_REF)
-        _validate_project_ref(source_ref, "source_ref", project_root)
+        _validate_project_ref(source_ref, "source_ref", project_root, _resolved_root=resolved_root)
+        validated_refs.add(source_ref)
         fingerprint = _bounded_text(payload.get("source_fingerprint"), "source_fingerprint", MAX_FINGERPRINT)
         observed_at = _timestamp(payload.get("observed_at"))
         raw_nodes = payload.get("nodes")
@@ -207,7 +212,9 @@ class DerivedContext:
                 raise DerivedContextError("derived context node kind is invalid")
             label = _bounded_text(raw.get("label"), "node label", MAX_LABEL)
             node_source = _bounded_text(raw.get("source_ref"), "node source_ref", MAX_SOURCE_REF)
-            _validate_project_ref(node_source, "node source_ref", project_root)
+            if node_source not in validated_refs:
+                _validate_project_ref(node_source, "node source_ref", project_root, _resolved_root=resolved_root)
+                validated_refs.add(node_source)
             summary = raw.get("summary")
             if summary is not None:
                 summary = _bounded_text(summary, "node summary", MAX_SUMMARY)
@@ -256,7 +263,32 @@ class DerivedContext:
     def source_current(self, path: str | Path) -> bool:
         """Return whether the imported source still has the recorded fingerprint."""
         try:
-            return fingerprint_source(path) == self.source_fingerprint
+            target = Path(path).expanduser()
+            if target.is_dir():
+                from .code_index import iter_python_files
+
+                base = target.resolve()
+                sig_parts: list[tuple[str, int, int]] = []
+                for item in iter_python_files(base):
+                    try:
+                        st = item.stat()
+                    except OSError:
+                        continue
+                    sig_parts.append((item.relative_to(base).as_posix(), int(st.st_size), int(st.st_mtime_ns)))
+                sig_parts.sort(key=lambda entry: entry[0])
+                sig = tuple(sig_parts)
+                cache_key = (str(base), self.source_fingerprint)
+                with _DIR_CURRENT_LOCK:
+                    cached = _DIR_CURRENT_CACHE.get(cache_key)
+                    if cached is not None and cached[0] == sig:
+                        return cached[1]
+                result = fingerprint_source(base) == self.source_fingerprint
+                with _DIR_CURRENT_LOCK:
+                    if len(_DIR_CURRENT_CACHE) >= 16:
+                        _DIR_CURRENT_CACHE.pop(next(iter(_DIR_CURRENT_CACHE)))
+                    _DIR_CURRENT_CACHE[cache_key] = (sig, result)
+                return result
+            return fingerprint_file(target) == self.source_fingerprint
         except (OSError, ValueError):
             return False
 
@@ -264,15 +296,18 @@ class DerivedContext:
         """Return a deterministic connected read projection for source references."""
         wanted = set(source_refs)
         direct = {node.id for node in self.nodes if node.source_ref in wanted}
+        adj: dict[str, list[str]] = {}
+        for edge in self.edges:
+            adj.setdefault(edge.from_id, []).append(edge.to_id)
+            adj.setdefault(edge.to_id, []).append(edge.from_id)
         connected = set(direct)
-        changed = True
-        while changed:
-            changed = False
-            for edge in self.edges:
-                if edge.from_id in connected or edge.to_id in connected:
-                    before = len(connected)
-                    connected.update((edge.from_id, edge.to_id))
-                    changed = changed or len(connected) != before
+        queue = deque(direct)
+        while queue:
+            cur = queue.popleft()
+            for nxt in adj.get(cur, ()):
+                if nxt not in connected:
+                    connected.add(nxt)
+                    queue.append(nxt)
         nodes = tuple(node for node in self.nodes if node.id in connected)
         edges = tuple(edge for edge in self.edges if edge.from_id in connected and edge.to_id in connected)
         return nodes, edges
@@ -607,12 +642,22 @@ def _bounded_text(value: Any, field: str, limit: int) -> str:
     return value
 
 
-def _validate_project_ref(value: str, field: str, project_root: str | Path | None) -> None:
-    if project_root is None:
+_DIR_CURRENT_LOCK = threading.Lock()
+_DIR_CURRENT_CACHE: dict[tuple[str, str], tuple[tuple[tuple[str, int, int], ...], bool]] = {}
+
+
+def _validate_project_ref(
+    value: str,
+    field: str,
+    project_root: str | Path | None,
+    *,
+    _resolved_root: Path | None = None,
+) -> None:
+    if project_root is None and _resolved_root is None:
         return
     if Path(value).is_absolute() or value.startswith(("/", "\\")) or (len(value) >= 2 and value[1] == ":"):
         raise DerivedContextError(f"derived context {field} leaves the project root")
-    root = Path(project_root).expanduser().resolve()
+    root = _resolved_root if _resolved_root is not None else Path(project_root).expanduser().resolve()
     candidate = (root / value).resolve()
     try:
         candidate.relative_to(root)

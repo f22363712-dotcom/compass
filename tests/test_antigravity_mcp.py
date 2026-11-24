@@ -81,7 +81,16 @@ class AntigravityMCPTest(unittest.TestCase):
         tool_names = [t["name"] for t in tools_res["result"]["tools"]]
         self.assertEqual(
             tool_names,
-            ["project_context", "append_evidence", "query_state", "propose_fact", "record_note", "verify_completion"],
+            [
+                "project_context",
+                "append_evidence",
+                "query_state",
+                "propose_fact",
+                "record_note",
+                "verify_completion",
+                "open_compass",
+                "compass_app_action",
+            ],
         )
 
     def test_mcp_call_project_context_and_query_state(self):

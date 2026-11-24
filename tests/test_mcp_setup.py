@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from project_compass.mcp_setup import (
+    default_config_path,
     generate_config,
     diagnose_environment,
     main as setup_main,
@@ -40,10 +43,15 @@ class McpSetupTest(unittest.TestCase):
     def test_diagnose_environment(self) -> None:
         diag = diagnose_environment(".")
         self.assertTrue(isinstance(diag["healthy"], bool))
-        self.assertTrue(len(diag["checks"]) >= 3)
+        self.assertTrue(len(diag["checks"]) >= 6)
         check_names = [c["name"] for c in diag["checks"]]
         self.assertIn("python_version", check_names)
         self.assertIn("project_directory", check_names)
+        self.assertIn("compass_mcp_cli", check_names)
+        self.assertIn("node_runtime", check_names)
+        self.assertIn("antigravity_sidecar_plugin", check_names)
+        parsed_ts = datetime.fromisoformat(diag["timestamp"])
+        self.assertIsNotNone(parsed_ts.tzinfo)
 
     def test_cli_doctor_and_stdout(self) -> None:
         ret = setup_main(["--doctor"])
@@ -51,6 +59,20 @@ class McpSetupTest(unittest.TestCase):
 
         ret = setup_main(["--client", "claude", "--project-path", "."])
         self.assertEqual(ret, 0)
+
+    def test_antigravity_default_config_path_prefers_modern_gemini_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_home = Path(tmp)
+            with patch("project_compass.mcp_setup.Path.home", return_value=fake_home):
+                self.assertEqual(
+                    default_config_path("antigravity"),
+                    fake_home / ".gemini" / "antigravity" / "mcp_config.json",
+                )
+                (fake_home / ".gemini" / "config").mkdir(parents=True, exist_ok=True)
+                self.assertEqual(
+                    default_config_path("antigravity"),
+                    fake_home / ".gemini" / "config" / "mcp_config.json",
+                )
 
 
 if __name__ == "__main__":

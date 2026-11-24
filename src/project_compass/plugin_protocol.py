@@ -150,7 +150,7 @@ def build_compact_project_context(
                 break
 
     if not core_goal:
-        core_goal = "核心目标待定锚"
+        core_goal = "核心目标待确定"
         core_goal_status = "empty"
 
     next_consensus = state.get("next_consensus") or handoff_brief.get("next_consensus") or select_next_consensus(team_facts)
@@ -277,13 +277,13 @@ def build_compact_project_context(
             "status": str(next_consensus.get("status") or "proposed"),
         }
 
-    goal_short = summarize_node_title(core_goal, max_chars=26) if core_goal != "核心目标待定锚" else "核心目标待定锚"
+    goal_short = summarize_node_title(core_goal, max_chars=26) if core_goal != "核心目标待确定" else "核心目标待确定"
     if compact_accepted or core_goal_status == "accepted":
-        line_1 = f"已定案基准 {len(compact_accepted)} 条；目标「{goal_short}」（{'已定案' if core_goal_status == 'accepted' else '待拍板'}）。"
+        line_1 = f"已定案基准 {len(compact_accepted)} 条；目标「{goal_short}」（{'已确定' if core_goal_status == 'accepted' else '待确认'}）。"
     elif core_goal_status == "proposed":
-        line_1 = f"暂无已定案基准：目标「{goal_short}」及全部讨论仍属待拍板备选，实现前需向用户确认。"
+        line_1 = f"暂无已定案基准：目标「{goal_short}」及全部讨论仍属待确认想法，实现前需向用户确认。"
     else:
-        line_1 = "新项目尚未立目标：首次明确目标或关键取舍时，请调用 record_note 写入 15 字短标题。"
+        line_1 = "新项目还没定目标：首次明确目标或关键取舍时，请调用 record_note 写入 15 字短标题。"
 
     top_hint = next(iter(state.get("agent_hints") or []), None)
     hint_tail = ""
@@ -293,7 +293,7 @@ def build_compact_project_context(
         hint_tail = f" · 当前下一步「{next_short}」"
 
     line_2 = (
-        f"待拍板 {len(pending_proposals)} 项 / 未填坑位 {len(open_pitfalls)} 项 / 分歧 {len(compact_conflicts)} 组{hint_tail}；"
+        f"待确认 {len(pending_proposals)} 项 / 待办事项 {len(open_pitfalls)} 项 / 分歧 {len(compact_conflicts)} 组{hint_tail}；"
         "遇到分叉或待办记一笔 record_note，报完工前先跑 verify_completion。"
     )
     nudge_lines = [line_1, line_2]

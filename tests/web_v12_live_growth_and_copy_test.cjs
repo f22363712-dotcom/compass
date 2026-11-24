@@ -134,7 +134,7 @@ async function main() {
         directions: { candidates: [], current: [], history: [] },
         timeline_chapters: [],
         thinking_line: {
-          root: { fact_id: null, label: "核心目标待定锚", status: "empty", evidence_ids: [] },
+          root: { fact_id: null, label: "核心目标待确定", status: "empty", evidence_ids: [] },
           branches: [],
           historical_archive: { count: 0, label: "", items: [] },
           reversals: [],
@@ -142,7 +142,7 @@ async function main() {
         },
       },
     },
-    team: { facts: [], evidence_ids: [], conflicts: [], directions: { candidates: [], current: [], history: [] }, timeline_chapters: [], thinking_line: { root: { label: "核心目标待定锚", status: "empty", evidence_ids: [] }, branches: [], historical_archive: { count: 0, label: "", items: [] }, reversals: [], code_nodes: [] } },
+    team: { facts: [], evidence_ids: [], conflicts: [], directions: { candidates: [], current: [], history: [] }, timeline_chapters: [], thinking_line: { root: { label: "核心目标待确定", status: "empty", evidence_ids: [] }, branches: [], historical_archive: { count: 0, label: "", items: [] }, reversals: [], code_nodes: [] } },
     activity_stream: [],
     personal_activity: [],
     evidence: [],
@@ -151,14 +151,14 @@ async function main() {
     review_history: [],
     fact_reviews: [],
     team_review_queue: [],
-    handoff_brief: { focus_goal: { fact_id: null, value: "核心目标待定锚", status: "empty", evidence_ids: [] }, accepted_decisions: [], pending_candidates: [], open_todos: [], code_nodes: [], markdown: "" },
+    handoff_brief: { focus_goal: { fact_id: null, value: "核心目标待确定", status: "empty", evidence_ids: [] }, accepted_decisions: [], pending_candidates: [], open_todos: [], code_nodes: [], markdown: "" },
   };
 
   const h = makeHarness(emptyState);
   await h.flush();
 
   assert.ok(h.element("hero-copy").textContent.includes("新项目已就绪"), "Empty 0->1 welcome copy missing");
-  assert.equal(h.element("goal-title").textContent, "核心目标待定锚");
+  assert.equal(h.element("goal-title").textContent, "核心目标待确定");
   assert.equal(h.intervals[0].ms, 3000, "Live polling interval must be 3000ms");
 
   // Switch to mindmap & simulate user typing a quick note AND having drawer open

@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <strong>Compass · Real-Time AI Development Notes &amp; Project Control Console (v1.4.0)</strong><br>
-  A real-time companion control console for building with Coding Agents — keep your IDE on the left while Compass grows an orthogonal mindmap, dual anchors, and an evidence-backed truth ledger on the right.
+  <strong>Compass · Real-Time AI Development Notes &amp; Project Control Console (v1.5.0)</strong><br>
+  A real-time companion control console for building with Coding Agents — keep your IDE on the left while Compass grows an orthogonal mindmap, dual anchors, and an evidence-backed truth ledger in the browser or directly inside Antigravity's native right pane.
 </p>
 
 <p align="center">
@@ -17,10 +17,10 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache-2.0 License"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.4.0-0d9488?style=flat-square" alt="Version v1.4.0"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.5.0-0d9488?style=flat-square" alt="Version v1.5.0"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/arch-Local--First%20%7C%20Zero--Deps-orange?style=flat-square" alt="Zero Dependencies"></a>
-  <a href="server.json"><img src="https://img.shields.io/badge/MCP-6%20Native%20Tools-purple?style=flat-square" alt="MCP 6 Native Tools"></a>
+  <a href="server.json"><img src="https://img.shields.io/badge/MCP-8%20Tools%20%7C%20MCP%20App-purple?style=flat-square" alt="MCP 8 Tools and MCP App"></a>
   <a href="tests/"><img src="https://img.shields.io/badge/tests-Python%20Unit%20%2B%20Node%20VM-success?style=flat-square" alt="Tests"></a>
 </p>
 
@@ -37,7 +37,7 @@
 
 Building with Coding Agents (Claude Code, Cursor, Antigravity, Codex CLI, etc.) moves fast, yet humans quickly lose situational awareness:
 
-| Common Failure Mode | Passive Chat / Raw Log Memory | With **Compass v1.4.0** |
+| Common Failure Mode | Passive Chat / Raw Log Memory | With **Compass v1.5.0** |
 | :--- | :--- | :--- |
 | **Agents Acting on Unsettled Ideas** | A casual brainstorm turns into unwanted code/config rewrites | Tentative ideas stay quarantined in **Pending Proposals** until you approve |
 | **Goal Drift & New-Thread Amnesia** | Early constraints and open tasks drown in verbose terminal logs | Pinned **Core Goal + Confirmed Next Step** anchors with instant snapshot handoff |
@@ -133,15 +133,19 @@ Inside any project folder (even a brand-new empty directory):
 # 1. Install or update Compass MCP workflow rules in AGENTS.md
 compass-setup --project-path . --init-rules
 
-# 2. Generate zero-config MCP JSON (supports antigravity / claude / cursor; add --write to update host config)
-compass-setup --client antigravity --project-path . --zero-config
+# 2. Generate zero-config MCP config (supports antigravity / codex / hermes / cursor / claude; add --write to write host config and install the Antigravity native Sidecar plugin)
+compass-setup --client antigravity --project-path . --zero-config --write
+
+# Configure Codex (TOML) or Hermes Agent (YAML) with the same one-liner
+compass-setup --client codex --project-path . --zero-config --write
+compass-setup --client hermes --project-path . --zero-config --write
 
 # 3. Verify environment health
 compass-setup --doctor --project-path .
 ```
 
 <details>
-<summary>Manual MCP JSON Snippet &amp; All 6 Native MCP Tools</summary>
+<summary>Manual MCP JSON Snippet &amp; All 8 Native MCP Tools</summary>
 
 Example entry for `.cursor/mcp.json`, `claude_desktop_config.json`, or Antigravity `mcp_config.json`:
 
@@ -161,24 +165,47 @@ Example entry for `.cursor/mcp.json`, `claude_desktop_config.json`, or Antigravi
 
 (Without global install, set `"command": "uvx"` and `"args": ["--from", "git+https://github.com/f22363712-dotcom/compass", "compass-mcp", "--project-path", "."]`.)
 
-Connected Coding Agents receive **6 native MCP tools**:
-1. `project_context`: Refresh and inspect settled goal/next-step anchors, confirmed facts, pending proposals, and open conflicts at task start or after context compaction.
+Connected Coding Agents receive **8 native MCP tools + 5-tier cross-agent dashboard delivery**:
+1. `project_context`: Refresh and inspect settled goal/next-step anchors, confirmed facts, queued `priority_dispatches`, pending proposals, and open conflicts at task start or after context compaction.
 2. `record_note`: One-step note recorder for goals, decisions, assumptions, or tasks with concise human-readable titles.
 3. `verify_completion`: Pre-completion gate checking changed files, verification gaps, pending tasks, and in-chat `nudge_lines`.
 4. `append_evidence`: Append public discussion turns and verifiable command execution records.
 5. `query_state`: Query workspace state, divergent positions, and unresolved evidence gaps.
 6. `propose_fact`: Submit structured fact proposals with exact source quotes (held as `proposed` until confirmed).
+7. `open_compass`: On-demand workbench launcher that inspects handshake `clientInfo`, `capabilities`, and desktop/SSH environment to deliver the full Compass dashboard cleanly across Antigravity native sidecar (`antigravity_sidecar`), IDE built-in browser hosts (`ide_builtin_browser` such as Codex / Cursor returning `dashboard_url`), local desktop CLI browsers (`external_browser` such as local Hermes / Claude Code auto-opening once), SSH port-forwarding fallback (`headless_terminal`), or `ui://compass/workbench.html` inline MCP App (`mcp_app_inline`), while staying 100% silent on routine turns.
+8. `compass_app_action`: App-scoped fallback bridge enabling accept/reject, doc rescan, quick-note capture, and priority dispatching with strict two-tier owner vs. member permission checks.
 
 </details>
 
-### Step 3: Launch the Live Companion Workbench
+### Step 3: Open the Live Companion Workbench (Native Sidecar / Built-In Browser / System Browser)
+
+- **Native Antigravity auxiliary-pane sidecar**: After `compass-setup --client antigravity --write` installs the bundled plugin and `/compass` skill, invoke `/compass` anytime to open the **full interactive dashboard** via the clickable `sidecar://compass/compass_board/` pill in chat, auto-following left-pane workspace switches and wiring `⚡ 定案并推进` directly into chat input pills, active turns, or new dedicated conversations (ordinary turns stay silent).
+- **Codex / Cursor / Hermes adaptive delivery**: Running `compass-setup --client codex|hermes --write` merges `~/.codex/config.toml` or `~/.hermes/config.yaml` non-destructively (add `--init-rules` inside a repo for `AGENTS.md`). Calling `open_compass` spawns or reuses a single idle-bounded local dashboard daemon (`http://127.0.0.1:<port>/`): IDE hosts receive the local URL to open in their built-in preview browser, GUI CLI agents like local Hermes auto-launch once in the system browser, and headless SSH terminals receive SSH port-forwarding instructions.
+- **Manual standalone HTTP launch**:
 
 ```bash
 # Scan files, extract documentation facts, build stdlib AST code index, and open Web UI
 compass --scan . --extract-docs --with-code-index --web --port 8787
 ```
 
-Open `http://127.0.0.1:8787/` and snap it next to your IDE (`540px–720px` width works cleanly in split view).
+Open `http://127.0.0.1:8787/` and snap it next to your IDE (`540px–720px` width works cleanly in split view). Click `⚡ 定案并推进` on any card or drawer to lock the decision, persist it to the priority dispatch queue, and copy a ready-to-paste execution brief.
+
+### 👥 Customizable Team Role Templates & Two-Tier Authority (`--team-template`)
+
+Alongside zero-config solo multi-session mode, Compass provides four built-in team presets (`solo`, `product_delivery`, `fullstack_engineering`, `research_lab`) plus a `custom` blank template with strict two-tier authority (one project owner for confirmation/dispatch, and 1–8 token-bound member seats restricted to proposals and notes):
+
+```bash
+# List all built-in role presets
+compass-setup --list-templates
+
+# Generate a universal product delivery config skeleton (lead owner + planner/developer/qa seats)
+compass-setup --team-template product_delivery --project-path .
+
+# Define custom seats with readable role labels and responsibilities (token_env names only; zero secret echo)
+compass-setup --team-template custom --project-path . --owner-id lead \
+  --role-seat "architect:Solution Architect:Scope boundaries and design proposals" \
+  --role-seat "qa:Quality Gate:Verify regression tests and delivery acceptance"
+```
 
 ### 🌐 Multi-Project & Parallel Session Workflow (Global MCP)
 

@@ -48,7 +48,7 @@ const initialState = {
   project: { project_id: "proj-v13", name: "Compass v13", evidence_count: 1, fact_count: 2, read_only: false },
   projects: [{ project_id: "proj-v13", project_name: "Compass v13" }],
   sample_mode: false,
-  llm_status: { enabled: true, mode: "cloud_llm", model: "MiniMax-M2.7", provider_label: "语义增强 · MiniMax-M2.7" },
+  llm_status: { enabled: true, mode: "cloud_llm", model: "MiniMax-M2.7", provider_label: "AI 辅助 · MiniMax-M2.7" },
   next_consensus: {
     fact_id: "f-next",
     kind: "task",
@@ -157,7 +157,7 @@ async function main() {
   vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
   await new Promise((r) => setTimeout(r, 20));
 
-  assert.equal(element("llm-status-badge").textContent, "语义增强 · MiniMax-M2.7");
+  assert.equal(element("llm-status-badge").textContent, "AI 辅助 · MiniMax-M2.7");
   assert.equal(element("goal-title").textContent, "打造高掌控工作台");
   assert.equal(element("next-consensus-title").textContent, "完成双锚点交互走查");
 

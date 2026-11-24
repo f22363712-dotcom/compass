@@ -11,7 +11,6 @@ from typing import Any
 from .candidate_extraction import current_file_snapshots, validate_candidates
 from .evidence_filters import SENSITIVE
 from .extraction_progress import ExtractionProgress, source_key
-from .fact_engine import derive_facts
 from .limits import MAX_CANDIDATES_PER_PAYLOAD, MAX_FACT_QUOTE_CHARS
 from .models import EvidenceEvent
 
@@ -166,6 +165,17 @@ def _extract_tasks(content: str, name_upper: str) -> list[tuple[str, str]]:
     return tasks
 
 
+def _is_archived_or_snapshot_doc(rel_path: str) -> bool:
+    """Skip historical archives and dated point-in-time snapshot reports."""
+    norm = rel_path.replace("\\", "/").strip().lower()
+    if any(seg in norm for seg in ("archive/", "/archive/", "superpowers/", "/superpowers/", "deprecated/", "/deprecated/")):
+        return True
+    name = Path(norm).name
+    if name == "changelog.md":
+        return True
+    return bool(re.search(r"_\d{4}-\d{2}-\d{2}\.md$", name))
+
+
 def _doc_priority(event: EvidenceEvent) -> tuple[int, str, str]:
     rel = str(event.metadata.get("source_ref") or event.id).replace("\\", "/")
     upper = Path(rel).name.upper()
@@ -206,8 +216,22 @@ def scan_document_candidates(
         if type(cur) is not int or cur not in (0, len(source.content)):
             raise ValueError("document fact rule requires a whole immutable source cursor")
 
-    covered = [(f.evidence_ids, f.quote or f.value) for f in derive_facts(events)]
-    existing_goals = sum(1 for f in derive_facts(events) if f.kind.value == "goal" and f.claim_type == "document_statement")
+    covered: list[tuple[tuple[str, ...], str]] = []
+    existing_goals = 0
+    for ev in events:
+        facts_meta = ev.metadata.get("facts") if isinstance(ev.metadata, dict) else None
+        if not isinstance(facts_meta, list):
+            continue
+        for item in facts_meta:
+            if not isinstance(item, dict):
+                continue
+            q = str(item.get("quote") or item.get("value") or "")
+            sid = str(item.get("source_id") or ev.id)
+            covered.append(((sid,), q))
+            if item.get("kind") == "goal" and (
+                item.get("claim_type") == "document_statement" or str(sid).startswith("scan-file-")
+            ):
+                existing_goals += 1
 
     rows: list[dict[str, Any]] = []
     updates: dict[str, int] = {}
@@ -250,6 +274,8 @@ def scan_document_candidates(
         name_upper = Path(rel).name.upper()
         visited += 1
         updates[key] = len(source.content)
+        if _is_archived_or_snapshot_doc(rel):
+            continue
 
         if name_upper in _GOAL_FILES and counts["goal"] < limits["goal"]:
             goal_quote = _extract_readme_goal(source.content)

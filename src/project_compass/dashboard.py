@@ -6,6 +6,11 @@ import re
 
 from .activity_stream import build_session_activity_stream
 from .agent_hints import build_local_agent_hints
+from .decision_graph import (
+    attach_decision_context,
+    is_legacy_noise_fact,
+    normalize_same_author_supersession,
+)
 from .evidence_filters import (
     SENSITIVE,
     as_utc_timestamp,
@@ -143,7 +148,7 @@ def _build_thinking_line(
     else:
         root = {
             "fact_id": None,
-            "label": "核心目标待定锚",
+            "label": "核心目标待确定",
             "full_label": "写一条随手记或让 AI 记录核心目标，右侧分支会自动生长",
             "status": "empty",
             "evidence_ids": [],
@@ -227,6 +232,7 @@ def _build_thinking_line(
 
     active_decisions.sort(
         key=lambda dec: (
+            1 if dec.get("superseded_by_fact_id") else 0,
             0 if dec.get("status") == "accepted" else (1 if dec.get("status") == "conflicted" else 2),
             -_safe_obs_ts(dec.get("observed_at")),
             str(dec.get("id") or ""),
@@ -238,12 +244,24 @@ def _build_thinking_line(
         if not val or val in seen_quotes:
             continue
         seen_quotes.add(val)
+        dc = dec.get("decision_context") or {}
+        c_stage = str(dc.get("stage") or "")
+        premise_state = str(
+            dc.get("premise_status")
+            or ((dc.get("premises") or [{}])[0].get("status") if dc.get("premises") else "")
+            or ""
+        )
+        branch_state = "abandoned" if c_stage == "rejected_path" else "chosen"
         short_label = dec.get("short_title") or summarize_node_title(val, max_chars=22)
         branches.append({
             "branch_id": f"dec-{dec.get('id') or idx}",
             "fact_id": dec.get("id"),
             "kind": dec.get("kind", "decision"),
-            "state": "chosen",
+            "state": branch_state,
+            "causal_stage": c_stage,
+            "fork_count": len(dc.get("alternatives") or []),
+            "premise_state": premise_state,
+            "rejection_reason": str(dc.get("rejection_reason") or ""),
             "status": dec.get("status", "proposed"),
             "source_status": (dec.get("source_state") or {}).get("status", "recorded"),
             "label": short_label,
@@ -326,8 +344,8 @@ def _build_thinking_line(
             "kind": "execution",
             "state": "chosen",
             "status": first_unmatched.get("status", "proposed"),
-            "label": "待填坑位与待办" if chosen_branches else "待办执行清单",
-            "full_label": "尚未挂靠具体决策分支的待办与坑位",
+            "label": "待办事项" if chosen_branches else "待办执行清单",
+            "full_label": "尚未归入具体决策分支的待办事项",
             "evidence_ids": first_unmatched["evidence_ids"],
             "children": unmatched_tasks[:6],
         })
@@ -412,10 +430,22 @@ def _build_session_presence(views: dict, review_queue: list[dict], accepted_subj
     }
 
 
-def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict], structure: dict) -> dict:
+def _build_handoff_brief(
+    project_name: str,
+    views: dict,
+    review_queue: list[dict],
+    structure: dict,
+    *,
+    rejected_fact_ids: set[str] | frozenset[str] = frozenset(),
+) -> dict:
     team_facts = views["team"].get("facts") or []
-    focus_goal = select_primary_goal(team_facts)
-    next_consensus = select_next_consensus(team_facts)
+    active_team_facts = [
+        f for f in team_facts if f.get("id") not in rejected_fact_ids and f.get("status") != "rejected"
+    ]
+    focus_goal = select_primary_goal(active_team_facts)
+    next_consensus = select_next_consensus(
+        [f for f in active_team_facts if not is_legacy_noise_fact(f)]
+    )
     accepted_decisions = [
         {
             "fact_id": f.get("id"),
@@ -441,7 +471,7 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
         }
         for item in review_queue[:8]
     ]
-    all_task_facts = [f for f in team_facts if f.get("kind") == "task"]
+    all_task_facts = [f for f in active_team_facts if f.get("kind") == "task"]
     live_task_facts = [f for f in all_task_facts if not is_historical_doc_fact(f)]
     chosen_task_facts = live_task_facts or all_task_facts
     todos = [
@@ -509,6 +539,7 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
     if next_consensus is not None:
         next_val = str(next_consensus.get("value") or "").strip()
         next_consensus_summary = {
+            "id": next_consensus.get("id"),
             "fact_id": next_consensus.get("id"),
             "kind": next_consensus.get("kind"),
             "value": next_val,
@@ -516,6 +547,7 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
             "short_title": next_consensus.get("short_title") or summarize_node_title(next_val, max_chars=24),
             "status": next_consensus.get("status", "proposed"),
             "author": next_consensus.get("author"),
+            "observed_at": next_consensus.get("observed_at"),
             "is_candidate_suggestion": bool(next_consensus.get("is_candidate_suggestion")),
             "evidence_ids": list(next_consensus.get("evidence_ids") or [])[:3],
         }
@@ -525,7 +557,7 @@ def _build_handoff_brief(project_name: str, views: dict, review_queue: list[dict
             "fact_id": focus_goal.get("id") if focus_goal else None,
             "value": focus_goal.get("value") if focus_goal else "当前核心目标待确立",
             "clean_value": clean_display_text(focus_goal.get("value") or "") if focus_goal else "当前核心目标待确立",
-            "short_title": (focus_goal.get("short_title") or summarize_node_title(focus_goal.get("value") or "", max_chars=28)) if focus_goal else "核心目标待定锚",
+            "short_title": (focus_goal.get("short_title") or summarize_node_title(focus_goal.get("value") or "", max_chars=28)) if focus_goal else "核心目标待确定",
             "status": focus_goal.get("status", "proposed") if focus_goal else "empty",
             "evidence_ids": list(focus_goal.get("evidence_ids") or [])[:3] if focus_goal else [],
         },
@@ -561,13 +593,32 @@ def build_dashboard_state(
     _enrich_fact_titles(views["team"].get("facts") or [], events_by_id)
     for member_view in (views.get("personal") or {}).values():
         _enrich_fact_titles(member_view.get("facts") or [], events_by_id)
+    normalize_same_author_supersession(views, review_history)
     index = build_evidence_index(events, facts).with_candidate_relations(build_requested_evidence_relations(events, facts, review_history)).with_confirmed_relations(confirmed_relations)
     team_facts = views["team"]["facts"]
     accepted_subjects = {fact["subject_key"] for fact in team_facts if fact["status"] == "accepted"}
     latest_review_by_fact: dict[str, dict] = {}
-    for review in review_history:
+    for review in [*fact_reviews, *review_history]:
         if review.get("fact_id") and review.get("action") != "confirm_relation":
             latest_review_by_fact[str(review["fact_id"])] = review
+    rejected_fact_ids = {
+        fid for fid, rev in latest_review_by_fact.items() if rev.get("action") == "reject_fact"
+    }
+    completed_fact_ids = {
+        str(review["fact_id"])
+        for review in [*fact_reviews, *review_history]
+        if review.get("fact_id") and review.get("action") == "complete_fact"
+    }
+    if completed_fact_ids:
+        for f in team_facts:
+            if f.get("id") in completed_fact_ids:
+                f["completed"] = True
+                f["task_state"] = "completed"
+        for member_view in (views.get("personal") or {}).values():
+            for f in (member_view.get("facts") or []):
+                if f.get("id") in completed_fact_ids:
+                    f["completed"] = True
+                    f["task_state"] = "completed"
     active_evidence_requests = {}
     for review in review_history:
         fact_id = review.get("fact_id")
@@ -624,7 +675,9 @@ def build_dashboard_state(
         for fact in team_facts
         if fact["status"] in {"proposed", "conflicted"}
         and fact["subject_key"] not in accepted_subjects
+        and fact["id"] not in completed_fact_ids
         and latest_review_by_fact.get(fact["id"], {}).get("action") != "reject_fact"
+        and not is_legacy_noise_fact(fact)
     ]
     review_queue.sort(key=lambda item: (0 if item["status"] == "conflicted" else 1, item["kind"], item["fact_id"]))
     activity = {}
@@ -665,10 +718,12 @@ def build_dashboard_state(
                     symbol_tokens.add(sym_hit.rsplit(".", 1)[-1])
                 for mod_hit in re.findall(r"\b([a-z][a-z0-9_]{2,}_(?:provider|memory|server|relevance|intake|index|export|watcher|store|workspace))\b", text):
                     symbol_tokens.add(mod_hit)
+        py_basenames = {tok.rsplit("/", 1)[-1] for tok in py_tokens}
         direct_symbol_ids: set[str] = set()
         for node in nodes:
             norm_src = node.source_ref.replace("\\", "/")
-            if any(norm_src == tok or norm_src.endswith("/" + tok) for tok in py_tokens):
+            norm_tail = norm_src.rsplit("/", 1)[-1]
+            if norm_src in py_tokens or (norm_tail in py_basenames and any(norm_src.endswith("/" + tok) for tok in py_tokens)):
                 evidence_refs.add(norm_src)
             elif Path(norm_src).stem in symbol_tokens:
                 evidence_refs.add(norm_src)
@@ -715,29 +770,51 @@ def build_dashboard_state(
             "related_edge_ids": [edge.id for edge in visible_edges if edge.id in related_edge_id_set],
             "evidence_source_refs": sorted(evidence_refs & {node.source_ref for node in nodes}),
         }
-    team_fallback_goal = select_primary_goal(views["team"].get("facts") or [])
+    decision_summary = attach_decision_context(
+        views["team"].get("facts") or [],
+        views.get("personal") or {},
+        events,
+        derived_context_dict=structure,
+    )
+    active_team_facts = [
+        f
+        for f in (views["team"].get("facts") or [])
+        if f.get("id") not in rejected_fact_ids and f.get("status") != "rejected"
+    ]
+    team_fallback_goal = select_primary_goal(active_team_facts)
     views["team"]["timeline_chapters"] = _build_timeline_chapters(views["team"].get("facts") or [], views["team"].get("directions") or {})
-    views["team"]["thinking_line"] = _build_thinking_line(views["team"].get("facts") or [], views["team"].get("directions") or {}, structure)
+    views["team"]["thinking_line"] = _build_thinking_line(active_team_facts, views["team"].get("directions") or {}, structure)
     for member_view in views["personal"].values():
         m_facts = member_view.get("facts") or []
+        active_m_facts = [f for f in m_facts if f.get("id") not in rejected_fact_ids and f.get("status") != "rejected"]
         m_dirs = member_view.get("directions") or {}
         member_view["timeline_chapters"] = _build_timeline_chapters(m_facts, m_dirs)
-        member_view["thinking_line"] = _build_thinking_line(m_facts, m_dirs, structure, fallback_goal=team_fallback_goal)
-        if not any(f.get("kind") == "goal" for f in m_facts) and team_fallback_goal is not None:
+        member_view["thinking_line"] = _build_thinking_line(active_m_facts, m_dirs, structure, fallback_goal=team_fallback_goal)
+        if not any(f.get("kind") == "goal" for f in active_m_facts) and team_fallback_goal is not None:
             member_view["fallback_goal"] = dict(team_fallback_goal)
     project_name = Path(project_path).name if project_path else "Project Compass"
     session_presence = _build_session_presence(views, review_queue, accepted_subjects, latest_review_by_fact)
-    handoff_brief = _build_handoff_brief(project_name, views, review_queue, structure)
+    handoff_brief = _build_handoff_brief(
+        project_name,
+        views,
+        review_queue,
+        structure,
+        rejected_fact_ids=rejected_fact_ids,
+    )
     index_payload = index.to_dict()
-    for catalog_item in index_payload.get("evidence") or []:
+    evidence_catalog = index_payload.get("evidence") or []
+    dense_catalog = len(evidence_catalog) > 400
+    recent_tool_cutoff = max(0, len(evidence_catalog) - 120)
+    excerpt_limit = 500 if dense_catalog else 2000
+    tool_kinds = {"tool_call", "tool_result"}
+    for idx, catalog_item in enumerate(evidence_catalog):
         src_ev = events_by_id.get(catalog_item.get("id"))
-        if (
-            src_ev is not None
-            and is_public_raw_event(src_ev)
-            and not is_platform_control(src_ev.content, kind=src_ev.kind)
-            and SENSITIVE.search(src_ev.content) is None
-        ):
-            catalog_item["search_excerpt"] = src_ev.content[:2000]
+        if src_ev is None or not is_public_raw_event(src_ev):
+            continue
+        if dense_catalog and src_ev.kind in tool_kinds and idx < recent_tool_cutoff:
+            continue
+        if not is_platform_control(src_ev.content, kind=src_ev.kind) and SENSITIVE.search(src_ev.content) is None:
+            catalog_item["search_excerpt"] = src_ev.content[:excerpt_limit]
     state = {
         "project": {
             "name": project_name,
@@ -758,8 +835,96 @@ def build_dashboard_state(
         "team_review_queue": review_queue,
         "evidence_requests": evidence_requests,
         "derived_context": structure,
+        "decision_summary": decision_summary,
         "llm_status": public_llm_status(),
         **index_payload,
     }
     state["agent_hints"] = build_local_agent_hints(state)
     return state
+
+
+def build_mindmap_tree(state: dict, *, max_nodes: int = 12) -> dict:
+    """Project a compact orthogonal mindmap node list from dashboard state for MCP App & companions."""
+    team = state.get("team") or {}
+    team_facts = list(team.get("facts") or [])
+    thinking_line = team.get("thinking_line") or {}
+
+    latest_review: dict[str, dict] = {}
+    for item in state.get("review_history") or []:
+        fid = item.get("fact_id")
+        if fid and item.get("action") != "confirm_relation":
+            latest_review[str(fid)] = item
+    rejected_ids = {fid for fid, rev in latest_review.items() if rev.get("action") == "reject_fact"}
+    fact_by_id = {str(f.get("id")): f for f in team_facts if f.get("id")}
+
+    def _to_node(fact: dict) -> dict:
+        raw_val = str(fact.get("value") or fact.get("quote") or "").strip()
+        kind = str(fact.get("kind") or "decision")
+        return {
+            "id": str(fact.get("id") or ""),
+            "kind": kind,
+            "title": fact.get("short_title") or summarize_node_title(raw_val, max_chars=28 if kind == "goal" else 22),
+            "value": str(fact.get("clean_value") or clean_display_text(raw_val) or raw_val),
+            "status": str(fact.get("status") or "proposed"),
+            "evidence_ids": list(fact.get("evidence_ids") or [])[:4],
+            "member_id": str(fact.get("author") or ""),
+            "session_id": str(fact.get("session_id") or ""),
+            **({"task_state": fact.get("task_state")} if fact.get("task_state") else {}),
+        }
+
+    nodes: list[dict] = []
+    seen_ids: set[str] = set()
+
+    def _append_fact(fact: dict | None) -> None:
+        if not fact or len(nodes) >= max_nodes:
+            return
+        fid = str(fact.get("id") or "")
+        if not fid or fid in seen_ids or fid in rejected_ids:
+            return
+        src_status = (fact.get("source_state") or {}).get("status")
+        if src_status in {"superseded", "unavailable"}:
+            return
+        seen_ids.add(fid)
+        nodes.append(_to_node(fact))
+
+    for branch in thinking_line.get("branches") or []:
+        bfid = str(branch.get("fact_id") or "")
+        if bfid and bfid in fact_by_id:
+            _append_fact(fact_by_id[bfid])
+        for child in branch.get("children") or []:
+            cfid = str(child.get("fact_id") or "")
+            if cfid and cfid in fact_by_id:
+                _append_fact(fact_by_id[cfid])
+
+    live_extras = [
+        f
+        for f in team_facts
+        if f.get("kind") in {"decision", "assumption", "task"}
+        and not (f.get("is_historical_doc") or is_historical_doc_fact(f))
+    ]
+    live_extras.sort(
+        key=lambda f: (
+            0 if f.get("status") == "accepted" else (1 if f.get("status") == "conflicted" else 2),
+            0 if f.get("kind") in {"decision", "assumption"} else 1,
+        )
+    )
+    for fact in live_extras:
+        _append_fact(fact)
+
+    if len(nodes) < 4:
+        doc_extras = [
+            f
+            for f in team_facts
+            if f.get("kind") in {"decision", "assumption", "task"}
+            and str(f.get("id") or "") not in seen_ids
+        ]
+        doc_extras.sort(key=lambda f: (0 if f.get("kind") in {"decision", "assumption"} else 1))
+        for fact in doc_extras:
+            if len(nodes) >= min(max_nodes, 8):
+                break
+            _append_fact(fact)
+
+    return {
+        "root": dict(thinking_line.get("root") or {}),
+        "nodes": nodes,
+    }

@@ -156,7 +156,7 @@ def evaluate_completion_gate(
     conflicts = list(team.get("conflicts") or [])
     brief = state.get("handoff_brief", {}) if isinstance(state, dict) else {}
     focus_goal = brief.get("focus_goal") or {}
-    core_goal = str(focus_goal.get("value") or "核心目标待定锚")
+    core_goal = str(focus_goal.get("value") or "核心目标待确定")
 
     public_events = [ev for ev in events if is_public_raw_event(ev)]
     events_by_id = {ev.id: ev for ev in public_events}
@@ -216,11 +216,27 @@ def evaluate_completion_gate(
 
     open_pitfalls: list[dict[str, Any]] = []
     pending_proposals: list[dict[str, Any]] = []
+    latest_review_by_fact: dict[str, dict[str, Any]] = {}
+    for rev in (state.get("review_history") or []) if isinstance(state, dict) else []:
+        fid = str(rev.get("fact_id") or "")
+        if fid and rev.get("action") != "confirm_relation":
+            latest_review_by_fact[fid] = rev
+    rejected_fact_ids = {
+        fid for fid, rev in latest_review_by_fact.items() if rev.get("action") == "reject_fact"
+    }
     for fact in team_facts:
-        if fact.get("status") == "rejected" or is_historical_doc_fact(fact):
+        fid = str(fact.get("id") or "")
+        if (
+            fact.get("status") == "rejected"
+            or (fid and fid in rejected_fact_ids)
+            or is_historical_doc_fact(fact)
+            or fact.get("completed")
+            or fact.get("superseded_by_fact_id")
+            or (fact.get("decision_context") or {}).get("stage") == "rejected_path"
+        ):
             continue
         short_label = fact.get("short_title") or summarize_node_title(fact.get("value") or "", max_chars=22)
-        if fact.get("kind") == "task" and fact.get("task_state") != "completed":
+        if fact.get("kind") == "task" and fact.get("task_state") not in {"completed", "reported_complete"}:
             open_pitfalls.append({
                 "fact_id": fact.get("id"),
                 "kind": "task",
@@ -245,13 +261,13 @@ def evaluate_completion_gate(
         sample_labels = "、".join(p["short_title"] for p in open_pitfalls[:3])
         warnings.append({
             "code": "open_pitfalls_remaining",
-            "message": f"尚有 {len(open_pitfalls)} 项未填坑位/待核实前提：{sample_labels}",
+            "message": f"尚有 {len(open_pitfalls)} 项待办与待核实前提：{sample_labels}",
         })
 
     if pending_proposals:
         warnings.append({
             "code": "unconfirmed_proposals_present",
-            "message": f"当前有 {len(pending_proposals)} 项待拍板方案尚未经用户确认，请提醒用户审阅而非默认定案。",
+            "message": f"当前有 {len(pending_proposals)} 项待确认方案尚未经用户确认，请提醒用户审阅而非默认定案。",
         })
 
     if conflicts:
@@ -287,8 +303,8 @@ def evaluate_completion_gate(
         nudge_1 = f"完工核对通过：改动 {len(files) or len(file_change_events)} 处并附带校验依据。"
 
     nudge_2 = (
-        f"当前基准 {len(accepted_facts)} 条 · 待拍板 {len(pending_proposals)} 条 · 未填坑位 {len(open_pitfalls)} 项；"
-        + ("请让用户点击看板「✓ 定案」确认新决策。" if pending_proposals else "可随时提醒用户查看右侧脑图全貌。")
+        f"当前基准 {len(accepted_facts)} 条 · 待确认 {len(pending_proposals)} 条 · 待办与待核实前提 {len(open_pitfalls)} 项；"
+        + ("可点击下方看板入口确认新决策。" if pending_proposals else "可随时提醒用户查看看板全貌。")
     )
 
     return {

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
+import time
 from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,15 +12,22 @@ from urllib.parse import parse_qs, urlparse
 from collections.abc import Callable
 import inspect
 from datetime import datetime, timezone
-from threading import RLock
+from threading import RLock, Timer
+import webbrowser
 
 from .agent_hints import AsyncHintCache, synthesize_investigation_summary
 from .dashboard import build_dashboard_state
+from .host_adapter import parse_workspace_uri
 from .investigator import investigate
 from .llm_connector import public_llm_status, set_active_llm_profile
 from .models import EvidenceEvent, EvidenceRelation
 from .agent_http import OwnerBrowserAccess, RequestTooLarge, route_agent_request
 from .derived_context import DerivedContext
+from .team_templates import (
+    extract_priority_dispatches,
+    list_team_templates,
+    record_priority_dispatch,
+)
 
 
 STATIC_ROOT = Path(__file__).parent / "web"
@@ -36,8 +46,20 @@ class InvestigationStateChanged(RuntimeError):
     pass
 
 
+def _parse_since_version(query_str: str) -> int | None:
+    raw = parse_qs(query_str).get("since_version", [""])[0].strip()
+    if not raw:
+        return None
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None
+
+
 class _DashboardHandler(BaseHTTPRequestHandler):
     server: "DashboardHTTPServer"
+    timeout = 10
 
     def log_message(self, *_args) -> None:
         return
@@ -87,23 +109,64 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             raise ValueError("request body must be an object")
         return value
 
-    def _require_local_json_post(self) -> tuple[bool, tuple[int, dict] | None]:
-        """Enforce JSON content-type and loopback Origin/Host on mutation endpoints (anti-CSRF)."""
-        content_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-        if content_type != "application/json":
-            return False, (415, {"error": "Content-Type must be application/json"})
-        local_hosts = {"127.0.0.1", "localhost", "::1", "[::1]"}
+    def _require_local_post_guard(
+        self,
+        *,
+        require_json_content_type: bool = False,
+    ) -> tuple[bool, tuple[int, dict] | None]:
+        """Enforce loopback Host, Origin/Sec-Fetch-Site (or trusted sidecar secret), and safe Content-Type."""
+        local_hosts = {"127.0.0.1", "localhost", "::1"}
         host_header = str(self.headers.get("Host") or "").strip()
-        if host_header:
-            host_only = urlparse(f"http://{host_header}").hostname or ""
+        req_ver = getattr(self, "request_version", None)
+        if not host_header:
+            if req_ver and req_ver != "HTTP/1.0":
+                return False, (403, {"error": "local loopback host required"})
+        else:
+            try:
+                host_only = urlparse(f"http://{host_header}").hostname or ""
+            except ValueError:
+                return False, (403, {"error": "local loopback host required"})
             if host_only.lower() not in local_hosts:
                 return False, (403, {"error": "local loopback host required"})
+
+        secret = getattr(self.server, "sidecar_internal_secret", None)
+        provided_secret = str(self.headers.get("X-Compass-Sidecar-Secret") or "")
+        client_addr = getattr(self, "client_address", None)
+        client_ip = str((client_addr or ("", 0))[0] or "")
+        trusted_sidecar_proxy = bool(
+            secret
+            and provided_secret
+            and provided_secret.isascii()
+            and client_ip in {"127.0.0.1", "::1"}
+            and hmac.compare_digest(provided_secret, secret)
+        )
+
         origin_header = str(self.headers.get("Origin") or "").strip()
-        if origin_header:
-            origin_host = urlparse(origin_header).hostname or ""
-            if origin_host.lower() not in local_hosts:
+        sec_fetch_site = str(self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if not trusted_sidecar_proxy:
+            if sec_fetch_site == "cross-site":
                 return False, (403, {"error": "cross-origin mutation blocked"})
+            if origin_header:
+                try:
+                    origin_host = urlparse(origin_header).hostname or ""
+                except ValueError:
+                    return False, (403, {"error": "cross-origin mutation blocked"})
+                if origin_host.lower() not in local_hosts:
+                    return False, (403, {"error": "cross-origin mutation blocked"})
+
+        content_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if content_type in {"text/plain", "multipart/form-data"}:
+            return False, (415, {"error": "Content-Type must be application/json"})
+        if content_type == "application/x-www-form-urlencoded":
+            if require_json_content_type or origin_header or sec_fetch_site:
+                return False, (415, {"error": "Content-Type must be application/json"})
+        elif require_json_content_type and content_type != "application/json":
+            return False, (415, {"error": "Content-Type must be application/json"})
         return True, None
+
+    def _require_local_json_post(self) -> tuple[bool, tuple[int, dict] | None]:
+        """Enforce JSON content-type and loopback Origin/Host (or trusted sidecar bridge secret) on mutations."""
+        return self._require_local_post_guard(require_json_content_type=True)
 
     def _sync_server_workspace(self, *, force_derived: bool = False) -> None:
         sync = getattr(self.server, "_sync_workspace_if_changed", None)
@@ -228,8 +291,113 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             }
             self._json(200, response_state)
 
+    def _handle_dispatch(self) -> None:
+        ok, err = self._require_local_json_post()
+        if not ok:
+            status_code, err_payload = err
+            self._reject(status_code, err_payload)
+            return
+        try:
+            payload = self._request_json()
+        except RequestTooLarge:
+            self._reject(413, {"error": "request exceeds bound"})
+            return
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            self._json(400, {"error": str(exc)})
+            return
+
+        req_project_id = payload.get("project_id")
+        if req_project_id is not None:
+            if not isinstance(req_project_id, str):
+                self._json(400, {"error": "project_id must be a string"})
+                return
+            if req_project_id.strip() and req_project_id.strip() != self.server.active_project_id():
+                self._json(403, {"error": "cannot write priority dispatches to a read-only preview project"})
+                return
+
+        fact_id = str(payload.get("fact_id") or "").strip()
+        title = str(payload.get("title") or "").strip()
+        value = str(payload.get("value") or "").strip()
+        evidence_ids = payload.get("evidence_ids") if payload.get("evidence_ids") is not None else []
+        mode = str(payload.get("mode") or "queue").strip() or "queue"
+        note = str(payload.get("note") or "").strip()
+        actor = str(payload.get("reviewer") or payload.get("actor") or "").strip()
+
+        if self.server.agent_inbox and actor != self.server.agent_inbox.owner_id:
+            self._json(403, {"error": "configured project owner identity required"})
+            return
+        if not fact_id or not value:
+            self._json(400, {"error": "fact_id and value are required"})
+            return
+        if not isinstance(evidence_ids, list):
+            self._json(400, {"error": "evidence_ids must be a list"})
+            return
+
+        if self.server.sample_mode:
+            response_state = self.server.dashboard_state()
+            response_state["dispatch"] = {
+                "id": "sample-dispatch",
+                "fact_id": fact_id,
+                "title": title or value[:28],
+                "value": value,
+                "evidence_ids": [str(eid) for eid in evidence_ids if str(eid).strip()],
+                "actor": actor or "sample-owner",
+                "mode": mode,
+                "sample_mode": True,
+            }
+            self._json(200, response_state)
+            return
+
+        workspace = self.server.active_workspace()
+        if workspace is None:
+            self._reject(409, {"error": "priority dispatch requires a persisted project workspace"})
+            return
+
+        with self.server.state_lock:
+            self._sync_server_workspace()
+            try:
+                dispatch_meta = record_priority_dispatch(
+                    workspace,
+                    fact_id=fact_id,
+                    title=title,
+                    value=value,
+                    evidence_ids=evidence_ids,
+                    actor=actor or "solo",
+                    mode=mode,
+                    note=note,
+                )
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+                return
+            except OSError:
+                self._json(503, {"error": "Priority dispatch could not be saved. Retry shortly."})
+                return
+            self.server.dashboard_events[:] = workspace.load()
+            self.server.record_workspace_signature()
+            response_state = self.server.dashboard_state()
+            response_state["dispatch"] = dispatch_meta
+            self._json(200, response_state)
+
+    def _touch_activity(self) -> None:
+        cb = getattr(self.server, "activity_callback", None)
+        if callable(cb):
+            try:
+                cb()
+            except Exception:
+                pass
+
     def do_GET(self) -> None:
+        self._touch_activity()
         parsed = urlparse(self.path)
+        if parsed.path == "/api/health":
+            self._json(200, {
+                "ok": True,
+                "project_path": self.server.dashboard_project_path,
+                "project_id": self.server.active_project_id(),
+                "pid": os.getpid(),
+                "sample_mode": self.server.sample_mode,
+            })
+            return
         if route_agent_request(self, parsed.path, 'GET'):
             return
         if parsed.path in STATIC_ASSETS:
@@ -243,14 +411,41 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             self._send(200, (STATIC_ROOT / filename).read_text(encoding="utf-8"), content_type, headers)
             return
         if parsed.path == "/api/state":
-            project_id = parse_qs(parsed.query).get("project_id", [""])[0]
-            if project_id:
+            query_map = parse_qs(parsed.query)
+            project_id = query_map.get("project_id", [""])[0]
+            if project_id and project_id != self.server.active_project_id():
                 try:
                     self._json(200, self.server.dashboard_state_for(project_id))
                 except ValueError:
                     self._json(404, {"error": "project not found"})
             else:
-                self._json(200, self.server.dashboard_state())
+                since_version = _parse_since_version(parsed.query)
+                if not getattr(self.server, "sample_mode", False):
+                    pre_sync = getattr(self.server, "pre_sync_discovery", None)
+                    if callable(pre_sync):
+                        pre_sync()
+                def _fetch_state():
+                    return (
+                        self.server.dashboard_state()
+                        if since_version is None
+                        else self.server.dashboard_state(since_version=since_version)
+                    )
+                lock = getattr(self.server, "state_lock", None)
+                snap = getattr(self.server, "_latest_state_snapshot", None)
+                if lock is not None:
+                    acquired = lock.acquire(timeout=0.35)
+                    if acquired:
+                        try:
+                            payload = _fetch_state()
+                        finally:
+                            lock.release()
+                        self._json(200, payload)
+                    elif snap is not None:
+                        self._json(200, snap)
+                    else:
+                        self._json(200, _fetch_state())
+                else:
+                    self._json(200, _fetch_state())
             return
         if parsed.path == "/api/export":
             if self.server.agent_inbox and not self.server.owner_access.authorized(self):
@@ -306,12 +501,63 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not found"})
 
+    def _handle_activate_project(self) -> None:
+        ok, err = self._require_local_json_post()
+        if not ok:
+            status_code, err_payload = err
+            self._reject(status_code, err_payload)
+            return
+        if self.server.sample_mode:
+            self._reject(403, {"error": "sample mode cannot switch workspaces"})
+            return
+        try:
+            payload = self._request_json()
+        except RequestTooLarge:
+            self._reject(413, {"error": "request exceeds bound"})
+            return
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        raw_path = payload.get("project_path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            self._json(400, {"error": "project_path is required"})
+            return
+        try:
+            target_root = parse_workspace_uri(raw_path)
+            if not target_root.is_dir():
+                raise ValueError(f"project_path directory not found: {target_root}")
+            self._json(200, self.server.activate_project_workspace(target_root))
+        except PermissionError as exc:
+            self._json(403, {"error": str(exc)})
+        except (OSError, ValueError) as exc:
+            self._json(400, {"error": str(exc)})
+
     def do_POST(self) -> None:
+        self._touch_activity()
         parsed = urlparse(self.path)
         if route_agent_request(self, parsed.path, 'POST'):
             return
-        if self.server.agent_inbox and parsed.path in {'/api/review', '/api/notes', '/api/extract', '/api/rescan', '/api/refresh', '/api/projects/scan', '/api/query-stats/clear', '/api/llm-mode'} and not self.server.owner_access.authorized(self):
+        ok, err = self._require_local_post_guard(
+            require_json_content_type=parsed.path in {
+                '/api/notes',
+                '/api/dispatch',
+                '/api/projects/activate',
+                '/api/projects/scan',
+                '/api/llm-mode',
+            }
+        )
+        if not ok:
+            status_code, err_payload = err
+            self._reject(status_code, err_payload)
+            return
+        if self.server.agent_inbox and parsed.path in {'/api/review', '/api/notes', '/api/dispatch', '/api/extract', '/api/rescan', '/api/refresh', '/api/projects/scan', '/api/projects/activate', '/api/query-stats/clear', '/api/llm-mode'} and not self.server.owner_access.authorized(self):
             self._reject(403, {'error': 'local owner browser confirmation required'})
+            return
+        if parsed.path == '/api/projects/activate':
+            self._handle_activate_project()
+            return
+        if parsed.path == '/api/dispatch':
+            self._handle_dispatch()
             return
         if parsed.path == '/api/llm-mode':
             if self.server.sample_mode:
@@ -394,10 +640,20 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             try:
                 if int(self.headers.get('Content-Length','0')) or self.headers.get('Transfer-Encoding'):
                     self._request_json()
+                since_version = _parse_since_version(parsed.query)
+                if not getattr(self.server, "sample_mode", False):
+                    pre_sync = getattr(self.server, "pre_sync_discovery", None)
+                    if callable(pre_sync):
+                        pre_sync()
                 with self.server.state_lock:
                     self.server.intake_status = self.server.refresh_callback()
                     self._sync_server_workspace()
-                    self._json(200, self.server.dashboard_state())
+                    payload = (
+                        self.server.dashboard_state()
+                        if since_version is None
+                        else self.server.dashboard_state(since_version=since_version)
+                    )
+                    self._json(200, payload)
             except RequestTooLarge:
                 self._reject(413, {'error':'request exceeds bound'})
             except (OSError, ValueError) as exc:
@@ -471,6 +727,8 @@ class _DashboardHandler(BaseHTTPRequestHandler):
 
 class DashboardHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 64
 
     def __init__(
         self,
@@ -492,6 +750,10 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         project_scan_job=None,
         derived_context: DerivedContext | None = None,
         auto_doc_sync: Callable[[], dict | None] | None = None,
+        auto_transcript_sync: Callable[[], dict | None] | None = None,
+        pre_transcript_discover: Callable[[], None] | None = None,
+        sidecar_internal_secret: str | None = None,
+        activity_callback: Callable[[], None] | None = None,
     ):
         if reason_preview and (sample_mode or not reason_preview.matches_project(project_path)):
             raise ValueError('reason preview requires its bound real project')
@@ -511,6 +773,10 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.sample_mode = sample_mode
         self.rescan_callback = rescan_callback
         self.auto_doc_sync = auto_doc_sync
+        self.auto_transcript_sync = auto_transcript_sync
+        self.pre_transcript_discover = pre_transcript_discover
+        self.sidecar_internal_secret = sidecar_internal_secret
+        self.activity_callback = activity_callback
         self.project_scan_status = {
             'enabled': rescan_callback is not None,
             'last_checked_at': (datetime.now(timezone.utc).isoformat() if (rescan_callback is not None and not sample_mode) else None),
@@ -537,7 +803,23 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.investigation_cache = {}
         self.hint_cache = AsyncHintCache()
         self.query_stats = {'total': 0, 'cache_hits': 0, 'questions': {}, 'recent': []}
+        self._cached_base_state_key = None
+        self._cached_base_state = None
+        self._latest_state_snapshot = None
+        self._cached_revision_stamp = None
+        self._cached_revision_hex = None
+        self._event_dict_cache: dict[tuple[int, int, int], tuple[str, int, dict]] = {}
+        self._cached_derived_current: bool | None = None
+        self._last_derived_check_mono: float = 0.0
         super().__init__(server_address, _DashboardHandler)
+
+    def pre_sync_discovery(self) -> None:
+        discover_fn = getattr(self, "pre_transcript_discover", None)
+        if not self.sample_mode and callable(discover_fn):
+            try:
+                discover_fn()
+            except (OSError, ValueError):
+                pass
 
     def _session_members(self) -> dict[str, str]:
         if self.intake_status.get('enabled') and self.intake_status.get('thread_id') and self.intake_status.get('member_id'):
@@ -552,6 +834,86 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             return ProjectWorkspace(self.workspace_root, self.dashboard_project_path)
         except (OSError, ValueError):
             return None
+
+    def activate_project_workspace(self, target_root: str | Path, *, workspace_root: str | Path | None = None) -> dict:
+        """Dynamically switch this dashboard server to a new local project workspace."""
+        with self.state_lock:
+            if self.sample_mode:
+                raise PermissionError("sample mode is read-only")
+            if self.agent_inbox:
+                raise PermissionError("cannot switch bound team agent server workspace")
+            resolved = parse_workspace_uri(target_root)
+            if not resolved.is_dir():
+                raise ValueError(f"project_path directory not found: {resolved}")
+            if self.dashboard_project_path:
+                try:
+                    if Path(self.dashboard_project_path).expanduser().resolve() == resolved:
+                        return self.dashboard_state()
+                except OSError:
+                    pass
+            ws_root = Path(workspace_root).expanduser().resolve() if workspace_root else (resolved / ".project-memory")
+            from .cli import _review_callback
+            from .local_plugin import cold_start_bootstrap_workspace
+            from .onboarding import load_workspace_derived_context
+            from .project_refresh import ProjectRescan
+            from .project_scan_job import ProjectScanJob
+            from .project_workspace import ProjectWorkspace
+            from .transcript_watcher import AutoTranscriptIntake, infer_primary_human_member
+
+            ws = ProjectWorkspace(ws_root, resolved)
+            fresh_events, _ = cold_start_bootstrap_workspace(ws)
+            confirmed, history, fact_reviews = ws.load_review_state() if ws.exists() else ([], [], [])
+            self.dashboard_events[:] = fresh_events
+            review_cb, confirmed, history, fact_reviews = _review_callback(
+                self.dashboard_events,
+                ws,
+                str(resolved),
+                confirmed,
+                history,
+                fact_reviews,
+            )
+            rescan_helper = ProjectRescan(ws, self.dashboard_events, extract_docs=True)
+            human_member = infer_primary_human_member(self.dashboard_events, history)
+            auto_intake = AutoTranscriptIntake(
+                resolved,
+                ws,
+                member_id=human_member,
+                initial_events=self.dashboard_events,
+                include_tools=True,
+            )
+            tx_initial = auto_intake.initial_status(self.dashboard_events)
+            self.workspace_root = ws_root
+            self.dashboard_project_path = str(resolved)
+            self.dashboard_confirmed_relations[:] = confirmed
+            self.dashboard_review_history[:] = history
+            self.dashboard_fact_reviews[:] = fact_reviews
+            self.review_callback = review_cb
+            self.refresh_callback = lambda: auto_intake.sync(self.dashboard_events, min_interval_sec=0.0)
+            self.intake_status = tx_initial
+            self.rescan_callback = rescan_helper.refresh
+            self.auto_doc_sync = rescan_helper.sync_if_docs_changed
+            self.auto_transcript_sync = lambda: auto_intake.sync(self.dashboard_events, min_interval_sec=1.5)
+            self.pre_transcript_discover = auto_intake.pre_discover
+            self.project_scan_status = {
+                "enabled": True,
+                "last_checked_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self.project_scan_job = ProjectScanJob(ws_root)
+            self.derived_context = load_workspace_derived_context(ws)
+            self._workspace_signature = ws.state_stat_signature() if ws.exists() else None
+            self.investigation_cache.clear()
+            self.hint_cache = AsyncHintCache()
+            self._cached_base_state_key = None
+            self._cached_base_state = None
+            self._latest_state_snapshot = None
+            self._cached_revision_stamp = None
+            self._cached_revision_hex = None
+            self._event_dict_cache.clear()
+            self._cached_derived_current = None
+            self._last_derived_check_mono = 0.0
+            self.dashboard_version += 1
+            self.last_dashboard_revision = None
+            return self.dashboard_state()
 
     def record_workspace_signature(self) -> None:
         ws = self.active_workspace()
@@ -569,6 +931,15 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             if isinstance(scan_status, dict):
                 self.project_scan_status = scan_status
                 if scan_status.get("updated"):
+                    force_reload = True
+        if not self.sample_mode and callable(self.auto_transcript_sync):
+            try:
+                tx_status = self.auto_transcript_sync()
+            except (OSError, ValueError):
+                tx_status = None
+            if isinstance(tx_status, dict):
+                self.intake_status = tx_status
+                if tx_status.get("updated"):
                     force_reload = True
         ws = self.active_workspace()
         if ws is None or not ws.exists():
@@ -595,31 +966,80 @@ class DashboardHTTPServer(ThreadingHTTPServer):
                 self.derived_context = loaded_ctx
         return changed
 
-    def dashboard_state(self) -> dict:
+    def dashboard_state(self, *, since_version: int | None = None) -> dict:
         with self.state_lock:
             self._sync_workspace_if_changed()
             revision = self.state_revision()
             if self.last_dashboard_revision is not None and revision != self.last_dashboard_revision:
                 self.dashboard_version += 1
             self.last_dashboard_revision = revision
-            result = {**build_dashboard_state(
-                self.dashboard_events,
+            intake_payload = dict(self.intake_status)
+            intake_payload['refreshable'] = self.refresh_callback is not None
+            if (
+                since_version is not None
+                and since_version == self.dashboard_version
+                and self._latest_state_snapshot is not None
+            ):
+                hints, hint_gen = self.hint_cache.get_or_schedule(
+                    revision,
+                    self._latest_state_snapshot,
+                    sample_mode=self.sample_mode,
+                )
+                return {
+                    'unchanged': True,
+                    'state_version': self.dashboard_version,
+                    'intake': intake_payload,
+                    'project_scan': dict(self.project_scan_status),
+                    'extraction': self.extraction_jobs.status() if self.extraction_jobs else {'enabled': False},
+                    'agent_hints': hints,
+                    'hint_generation': hint_gen,
+                }
+            session_members = self._session_members()
+            base_key = (
+                revision,
                 self.dashboard_project_path,
-                self.dashboard_confirmed_relations,
-                self.dashboard_review_history,
-                self.dashboard_fact_reviews,
-                session_members=self._session_members(),
-                derived_context=self.derived_context,
-            ), "intake": dict(self.intake_status), "sample_mode": self.sample_mode,
-                'project_scan': dict(self.project_scan_status), 'state_version': self.dashboard_version,
-                'extraction': self.extraction_jobs.status() if self.extraction_jobs else {'enabled': False}}
+                id(self.derived_context),
+                tuple(sorted(session_members.items())),
+            )
+            if base_key == self._cached_base_state_key and self._cached_base_state is not None:
+                result = dict(self._cached_base_state)
+                if isinstance(result.get('project'), dict):
+                    result['project'] = dict(result['project'])
+                if self.derived_context is not None and self.dashboard_project_path and isinstance(result.get('derived_context'), dict):
+                    source_path = Path(self.dashboard_project_path).resolve() / self.derived_context.source_ref
+                    result['derived_context'] = dict(result['derived_context'])
+                    result['derived_context']['current'] = self.derived_context.source_current(source_path)
+            else:
+                result = build_dashboard_state(
+                    self.dashboard_events,
+                    self.dashboard_project_path,
+                    self.dashboard_confirmed_relations,
+                    self.dashboard_review_history,
+                    self.dashboard_fact_reviews,
+                    session_members=session_members,
+                    derived_context=self.derived_context,
+                )
+                result['priority_dispatches'] = extract_priority_dispatches(self.dashboard_events)
+                result['team_templates'] = list_team_templates()
+                if self.reason_preview:
+                    result['reason_preview'] = self.reason_preview.project(self.dashboard_events)
+                if self.sample_mode:
+                    demo_title = next(
+                        (str((ev.metadata or {}).get("demo_title") or "").strip() for ev in self.dashboard_events if (ev.metadata or {}).get("demo_title")),
+                        "",
+                    )
+                    result['project']['name'] = demo_title or 'Sample project'
+                self._cached_base_state_key = base_key
+                self._cached_base_state = dict(result)
+
+            result['intake'] = intake_payload
+            result['sample_mode'] = self.sample_mode
+            result['project_scan'] = dict(self.project_scan_status)
+            result['state_version'] = self.dashboard_version
+            result['extraction'] = self.extraction_jobs.status() if self.extraction_jobs else {'enabled': False}
             result['agent_api'] = self.agent_inbox.public_status() if self.agent_inbox else {'enabled': False}
             from .project_workspace import ProjectWorkspace
             result['projects'] = [] if self.sample_mode else (ProjectWorkspace.list_registered(self.workspace_root) if self.workspace_root else [])
-            if self.reason_preview:
-                result['reason_preview']=self.reason_preview.project(self.dashboard_events)
-            if self.sample_mode:
-                result['project']['name'] = 'Sample project'
             result['investigation_stats'] = self.query_statistics()
             result['llm_status'] = public_llm_status()
             hints, hint_gen = self.hint_cache.get_or_schedule(
@@ -629,6 +1049,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             )
             result['agent_hints'] = hints
             result['hint_generation'] = hint_gen
+            self._latest_state_snapshot = result
             return result
 
     def active_project_id(self) -> str | None:
@@ -699,11 +1120,59 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         super().server_close()
 
     def state_revision(self):
-        value={'events': [event.to_dict() for event in self.dashboard_events],
+        derived_current = self._cached_derived_current
+        if self.derived_context is not None and self.dashboard_project_path:
+            now_mono = time.monotonic()
+            if derived_current is None or (now_mono - self._last_derived_check_mono) >= 5.0:
+                derived_current = self.derived_context.source_current(
+                    Path(self.dashboard_project_path).resolve() / self.derived_context.source_ref
+                )
+                self._cached_derived_current = derived_current
+                self._last_derived_check_mono = now_mono
+        else:
+            derived_current = None
+        stamp = (
+            tuple(
+                (id(ev), len(ev.metadata), len(ev.metadata.get('facts') or ()) if isinstance(ev.metadata, dict) else 0)
+                for ev in self.dashboard_events
+            ),
+            tuple(
+                (r.get('fact_id'), r.get('action'), r.get('observed_at'), r.get('reviewer'))
+                for r in self.dashboard_fact_reviews
+            ),
+            len(self.dashboard_review_history),
+            repr(self.dashboard_review_history[-1]) if self.dashboard_review_history else '',
+            tuple(id(rel) for rel in self.dashboard_confirmed_relations),
+            self.reason_preview.revision if self.reason_preview else None,
+            derived_current,
+        )
+        if stamp == self._cached_revision_stamp and self._cached_revision_hex is not None:
+            return self._cached_revision_hex
+        if len(self._event_dict_cache) > 8192:
+            self._event_dict_cache.clear()
+        event_dicts = []
+        for event in self.dashboard_events:
+            ev_key = (
+                id(event),
+                len(event.metadata),
+                len(event.metadata.get('facts') or ()) if isinstance(event.metadata, dict) else 0,
+            )
+            cached_entry = self._event_dict_cache.get(ev_key)
+            if cached_entry is not None and cached_entry[0] == event.id and cached_entry[1] == len(event.content):
+                event_dicts.append(cached_entry[2])
+            else:
+                encoded = event.to_dict()
+                self._event_dict_cache[ev_key] = (event.id, len(event.content), encoded)
+                event_dicts.append(encoded)
+        value={'events': event_dicts,
             'reviews': self.dashboard_fact_reviews, 'history': self.dashboard_review_history,
             'relations': [relation.to_dict() for relation in self.dashboard_confirmed_relations]}
         if self.reason_preview:value['reason_preview']=self.reason_preview.revision
-        return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True).encode('utf-8')).hexdigest()
+        if derived_current is not None:value['source_current']=derived_current
+        digest = hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True).encode('utf-8')).hexdigest()
+        self._cached_revision_stamp = stamp
+        self._cached_revision_hex = digest
+        return digest
 
     def investigate(self, question: str, current_member: str | None = None) -> dict:
         with self.state_lock:
@@ -798,8 +1267,35 @@ def create_dashboard_server(
     project_scan_job=None,
     derived_context: DerivedContext | None = None,
     auto_doc_sync: Callable[[], dict | None] | None = None,
+    auto_transcript_sync: Callable[[], dict | None] | None = None,
+    pre_transcript_discover: Callable[[], None] | None = None,
+    sidecar_internal_secret: str | None = None,
+    activity_callback: Callable[[], None] | None = None,
 ) -> DashboardHTTPServer:
-    return DashboardHTTPServer((host, port), events, project_path, confirmed_relations, review_history, fact_reviews, review_callback, refresh_callback, intake_status, sample_mode, rescan_callback, extraction_jobs, agent_inbox, reason_preview, workspace_root, project_scan_job, derived_context, auto_doc_sync=auto_doc_sync)
+    return DashboardHTTPServer(
+        (host, port),
+        events,
+        project_path,
+        confirmed_relations,
+        review_history,
+        fact_reviews,
+        review_callback,
+        refresh_callback,
+        intake_status,
+        sample_mode,
+        rescan_callback,
+        extraction_jobs,
+        agent_inbox,
+        reason_preview,
+        workspace_root,
+        project_scan_job,
+        derived_context,
+        auto_doc_sync=auto_doc_sync,
+        auto_transcript_sync=auto_transcript_sync,
+        pre_transcript_discover=pre_transcript_discover,
+        sidecar_internal_secret=sidecar_internal_secret,
+        activity_callback=activity_callback,
+    )
 
 
 def run_dashboard(
@@ -822,12 +1318,26 @@ def run_dashboard(
     project_scan_job=None,
     derived_context: DerivedContext | None = None,
     auto_doc_sync: Callable[[], dict | None] | None = None,
+    open_browser: bool = False,
 ) -> None:
     server = create_dashboard_server(events, host, port, project_path, confirmed_relations, review_history, fact_reviews, review_callback, refresh_callback, intake_status, sample_mode, rescan_callback, extraction_jobs, agent_inbox, reason_preview, workspace_root, project_scan_job, derived_context, auto_doc_sync=auto_doc_sync)
-    print(f"http://{host}:{server.server_address[1]}/", flush=True)
+    url = f"http://{host}:{server.server_address[1]}/"
+    print(url, flush=True)
+    browser_timer = None
+    if open_browser and os.environ.get("COMPASS_NO_BROWSER", "").strip() != "1":
+        def _open() -> None:
+            try:
+                webbrowser.open(url, new=2)
+            except Exception:
+                pass
+        browser_timer = Timer(0.25, _open)
+        browser_timer.daemon = True
+        browser_timer.start()
     try:
         if extraction_jobs:
             extraction_jobs.start_scheduler()
         server.serve_forever()
     finally:
+        if browser_timer is not None:
+            browser_timer.cancel()
         server.server_close()
