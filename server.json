@@ -1,12 +1,12 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.f22363712-dotcom/project-compass",
+  "name": "io.github.get-compass/project-compass",
   "title": "Compass",
   "description": "Real-time interactive development notes & evidence-backed project control center for solo builders and teams coding with AI.",
   "version": "1.7.1",
   "license": "Apache-2.0",
   "repository": {
-    "url": "https://github.com/f22363712-dotcom/compass",
+    "url": "https://github.com/get-compass/compass",
     "source": "github"
   },
   "packages": [

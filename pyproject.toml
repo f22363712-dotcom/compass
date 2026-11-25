@@ -24,9 +24,9 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/f22363712-dotcom/compass"
-Repository = "https://github.com/f22363712-dotcom/compass"
-Issues = "https://github.com/f22363712-dotcom/compass/issues"
+Homepage = "https://github.com/get-compass/compass"
+Repository = "https://github.com/get-compass/compass"
+Issues = "https://github.com/get-compass/compass/issues"
 
 [project.optional-dependencies]
 test = ["mcp>=2.3.0"]

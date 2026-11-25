@@ -117,12 +117,12 @@ Requires Python >= 3.10 with **zero external runtime dependencies** (`dependenci
 
 ```bash
 # Option A: Editable local install (recommended)
-git clone https://github.com/f22363712-dotcom/compass.git
+git clone https://github.com/get-compass/compass.git
 cd compass
 pip install -e .
 
 # Option B: Try immediately via uvx
-uvx --from git+https://github.com/f22363712-dotcom/compass compass --sample --web
+uvx --from git+https://github.com/get-compass/compass compass --sample --web
 ```
 
 ### Step 2: Initialize Project Rules & Zero-Config MCP
@@ -163,7 +163,7 @@ Example entry for `.cursor/mcp.json`, `claude_desktop_config.json`, or Antigravi
 }
 ```
 
-(Without global install, set `"command": "uvx"` and `"args": ["--from", "git+https://github.com/f22363712-dotcom/compass", "compass-mcp", "--project-path", "."]`.)
+(Without global install, set `"command": "uvx"` and `"args": ["--from", "git+https://github.com/get-compass/compass", "compass-mcp", "--project-path", "."]`.)
 
 Connected Coding Agents receive **8 native MCP tools + 5-tier cross-agent dashboard delivery**:
 1. `project_context`: Refresh and inspect settled goal/next-step anchors, confirmed facts, queued `priority_dispatches`, pending proposals, and open conflicts at task start or after context compaction.
