@@ -3,7 +3,7 @@
   "name": "io.github.f22363712-dotcom/project-compass",
   "title": "Compass",
   "description": "Real-time interactive development notes & evidence-backed project control center for solo builders and teams coding with AI.",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "license": "Apache-2.0",
   "repository": {
     "url": "https://github.com/f22363712-dotcom/compass",
@@ -13,7 +13,7 @@
     {
       "registry_type": "pypi",
       "identifier": "project-compass",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "transport": {
         "type": "stdio"
       }

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Compass · Real-Time AI Development Notes &amp; Project Control Console (v1.5.0)</strong><br>
+  <strong>Compass · Real-Time AI Development Notes &amp; Project Control Console (v1.7.1)</strong><br>
   A real-time companion control console for building with Coding Agents — keep your IDE on the left while Compass grows an orthogonal mindmap, dual anchors, and an evidence-backed truth ledger in the browser or directly inside Antigravity's native right pane.
 </p>
 
@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache-2.0 License"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.5.0-0d9488?style=flat-square" alt="Version v1.5.0"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.7.1-0d9488?style=flat-square" alt="Version v1.7.1"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/arch-Local--First%20%7C%20Zero--Deps-orange?style=flat-square" alt="Zero Dependencies"></a>
   <a href="server.json"><img src="https://img.shields.io/badge/MCP-8%20Tools%20%7C%20MCP%20App-purple?style=flat-square" alt="MCP 8 Tools and MCP App"></a>
@@ -37,7 +37,7 @@
 
 Building with Coding Agents (Claude Code, Cursor, Antigravity, Codex CLI, etc.) moves fast, yet humans quickly lose situational awareness:
 
-| Common Failure Mode | Passive Chat / Raw Log Memory | With **Compass v1.5.0** |
+| Common Failure Mode | Passive Chat / Raw Log Memory | With **Compass v1.7.1** |
 | :--- | :--- | :--- |
 | **Agents Acting on Unsettled Ideas** | A casual brainstorm turns into unwanted code/config rewrites | Tentative ideas stay quarantined in **Pending Proposals** until you approve |
 | **Goal Drift & New-Thread Amnesia** | Early constraints and open tasks drown in verbose terminal logs | Pinned **Core Goal + Confirmed Next Step** anchors with instant snapshot handoff |
@@ -99,7 +99,7 @@ Building with Coding Agents (Claude Code, Cursor, Antigravity, Codex CLI, etc.) 
 
 Switch anytime in the header (solo workspaces default to Solo Mode; multi-contributor workspaces adapt automatically to Team Mode):
 
-| Dimension | Solo Mode (`个人路线`) | Team Mode (`团队路线`) |
+| Dimension | Solo Mode (`个人模式`) | Team Mode (`团队协作模式`) |
 | :--- | :--- | :--- |
 | **Workflow Fit** | Fast single-developer + Agent sessions with zero ceremony | 2–4 person or multi-agent engineering consensus workbench |
 | **Primary Views** | **Live Notes · Pending** ↔ **Settled Baseline** + Orthogonal Mindmap | **Personal View** ↔ **Team Consensus · Conflict Resolution Matrix** |
@@ -179,7 +179,7 @@ Connected Coding Agents receive **8 native MCP tools + 5-tier cross-agent dashbo
 
 ### Step 3: Open the Live Companion Workbench (Native Sidecar / Built-In Browser / System Browser)
 
-- **Native Antigravity auxiliary-pane sidecar**: After `compass-setup --client antigravity --write` installs the bundled plugin and `/compass` skill, invoke `/compass` anytime to open the **full interactive dashboard** via the clickable `sidecar://compass/compass_board/` pill in chat, auto-following left-pane workspace switches and wiring `⚡ 定案并推进` directly into chat input pills, active turns, or new dedicated conversations (ordinary turns stay silent).
+- **Native Antigravity auxiliary-pane sidecar**: After `compass-setup --client antigravity --write` installs the bundled plugin and `/compass` skill, invoke `/compass` anytime to open the **full interactive dashboard** via the clickable `sidecar://compass/compass_board/` pill in chat, auto-following left-pane workspace switches and wiring `✓ 确认并发给 AI` directly into chat input pills, active turns, or new dedicated conversations (ordinary turns stay silent).
 - **Codex / Cursor / Hermes adaptive delivery**: Running `compass-setup --client codex|hermes --write` merges `~/.codex/config.toml` or `~/.hermes/config.yaml` non-destructively (add `--init-rules` inside a repo for `AGENTS.md`). Calling `open_compass` spawns or reuses a single idle-bounded local dashboard daemon (`http://127.0.0.1:<port>/`): IDE hosts receive the local URL to open in their built-in preview browser, GUI CLI agents like local Hermes auto-launch once in the system browser, and headless SSH terminals receive SSH port-forwarding instructions.
 - **Manual standalone HTTP launch**:
 
@@ -188,7 +188,7 @@ Connected Coding Agents receive **8 native MCP tools + 5-tier cross-agent dashbo
 compass --scan . --extract-docs --with-code-index --web --port 8787
 ```
 
-Open `http://127.0.0.1:8787/` and snap it next to your IDE (`540px–720px` width works cleanly in split view). Click `⚡ 定案并推进` on any card or drawer to lock the decision, persist it to the priority dispatch queue, and copy a ready-to-paste execution brief.
+Open `http://127.0.0.1:8787/` and snap it next to your IDE (`540px–720px` width works cleanly in split view). Click `✓ 确认并发给 AI` on any card or drawer to lock the decision, persist it to the priority dispatch queue, and copy a ready-to-paste execution brief.
 
 ### 👥 Customizable Team Role Templates & Two-Tier Authority (`--team-template`)
 

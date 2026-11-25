@@ -34,6 +34,7 @@ EXCLUDED_TOP_DIRS = {
 
 EXCLUDED_REL_PREFIXES = (
     "docs/archive",
+    "docs/reviews/v1.8-baseline",
     "logs",
     "tests/fixtures/benchmark/local-specs",
 )

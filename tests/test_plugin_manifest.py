@@ -34,11 +34,30 @@ class PluginManifestTests(unittest.TestCase):
             expected_version = match.group(1)
         manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
         server = json.loads((root / "server.json").read_text(encoding="utf-8"))
+        plugin_sub = json.loads(
+            (root / "src" / "project_compass" / "antigravity_plugin" / "compass" / "plugin.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        sidecar_pkg = json.loads(
+            (
+                root
+                / "src"
+                / "project_compass"
+                / "antigravity_plugin"
+                / "compass"
+                / "sidecars"
+                / "compass_board"
+                / "package.json"
+            ).read_text(encoding="utf-8")
+        )
         index_html = (root / "src" / "project_compass" / "web" / "index.html").read_text(encoding="utf-8")
 
-        self.assertEqual(expected_version, "1.7.0")
+        self.assertEqual(expected_version, "1.7.1")
         self.assertEqual(manifest["version"], expected_version)
         self.assertEqual(server["version"], expected_version)
+        self.assertEqual(plugin_sub["version"], expected_version)
+        self.assertEqual(sidecar_pkg["version"], expected_version)
         self.assertIn("v1.7", index_html)
         self.assertNotIn("your-org", json.dumps(server))
         self.assertNotIn("0.15s", server["description"])

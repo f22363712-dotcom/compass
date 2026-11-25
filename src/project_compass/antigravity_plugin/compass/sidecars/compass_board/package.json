@@ -1,6 +1,6 @@
 {
   "name": "compass_board",
-  "version": "1.5.0",
+  "version": "1.7.1",
   "type": "module",
   "description": "Antigravity auxiliary-pane sidecar hosting the full Compass web workbench"
 }

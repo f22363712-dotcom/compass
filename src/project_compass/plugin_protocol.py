@@ -294,7 +294,7 @@ def build_compact_project_context(
 
     line_2 = (
         f"待确认 {len(pending_proposals)} 项 / 待办事项 {len(open_pitfalls)} 项 / 分歧 {len(compact_conflicts)} 组{hint_tail}；"
-        "遇到分叉或待办记一笔 record_note，报完工前先跑 verify_completion。"
+        "用 record_note 记一条，报完工前先跑 verify_completion。"
     )
     nudge_lines = [line_1, line_2]
 

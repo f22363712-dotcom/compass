@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from . import __version__
+
 
 def _clean_text(val: Any) -> str:
     if val is None:
@@ -189,7 +191,7 @@ def export_prd(state: dict[str, Any]) -> str:
         f"# 产品需求与技术规格说明书 (PRD / SPEC)",
         f"## 项目：{project.get('name', 'Project Compass')}",
         "",
-        f"- **文档版本**：v1.5",
+        f"- **文档版本**：v{__version__}",
         f"- **生成时间**：{exported_at}",
         f"- **可追溯证据总量**：{project.get('evidence_count', len(state.get('evidence', [])))} 条",
         "",

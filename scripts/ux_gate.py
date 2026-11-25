@@ -12,14 +12,19 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ALLOWLIST = Path(__file__).resolve().with_name("ux_gate_allowlist.json")
 SCAN_SUFFIXES = {".py", ".js", ".html", ".css"}
+EXTRA_COPY_FILES = (
+    "README.md",
+    "README_EN.md",
+    "agent/skills/compass/SKILL.md",
+    "src/project_compass/antigravity_plugin/compass/plugin.json",
+)
 BLOCKING_DIALOG_RE = re.compile(
     r"(?:(?<![\w$])(?:window|self|globalThis)\s*\.\s*|(?<![.\w$]))(?:confirm|alert|prompt)\s*\("
 )
 TRANSITION_DECL_RE = re.compile(r"transition(?:-property)?\s*:\s*([^;{}]+)", re.IGNORECASE)
 CSS_COMMENT_RE = re.compile(r"/\*[\s\S]*?\*/")
-STRIP_STRINGS_AND_COMMENTS_RE = re.compile(
-    r"/\*[\s\S]*?\*/|//[^\n]*|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`"
-)
+REDUCED_MOTION_RE = re.compile(r"@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{", re.IGNORECASE)
+KEYFRAMES_HEAD_RE = re.compile(r"@(?:-webkit-)?keyframes\s+[\w-]+\s*\{", re.IGNORECASE)
 
 
 def load_allowlist(path: Path | None = None) -> dict:
@@ -40,14 +45,103 @@ def _is_allowlisted(rel_path: str, line: str, rules: list[dict]) -> bool:
     return False
 
 
+def _extract_brace_body(text: str, open_brace_idx: int) -> str:
+    depth = 0
+    for idx in range(open_brace_idx, len(text)):
+        ch = text[idx]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace_idx + 1 : idx]
+    return text[open_brace_idx + 1 :]
+
+
+def _strip_js_comments_and_strings(text: str) -> str:
+    """Strip comments and string literal contents while preserving ${...} template expressions."""
+    out: list[str] = []
+    n = len(text)
+    i = 0
+    stack: list[list] = [["code", 0]]
+
+    def _skip_quoted(start: int, quote: str) -> int:
+        j = start + 1
+        while j < n:
+            ch = text[j]
+            if ch == "\\":
+                j += 2
+                continue
+            if ch == quote:
+                return j + 1
+            j += 1
+        return n
+
+    while i < n:
+        ctx = stack[-1]
+        mode = ctx[0]
+        if mode == "tpl":
+            ch = text[i]
+            if ch == "\\":
+                out.append("  ")
+                i += 2
+            elif ch == "$" and i + 1 < n and text[i + 1] == "{":
+                out.append(" ")
+                stack.append(["tpl_expr", 1])
+                i += 2
+            elif ch == "`":
+                out.append(" ")
+                stack.pop()
+                i += 1
+            else:
+                out.append("\n" if ch == "\n" else " ")
+                i += 1
+            continue
+
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":
+            end = text.find("\n", i + 2)
+            i = n if end == -1 else end
+            out.append(" ")
+        elif ch == "/" and nxt == "*":
+            end = text.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            out.append(" ")
+        elif ch in ("'", '"'):
+            i = _skip_quoted(i, ch)
+            out.append(" ")
+        elif ch == "`":
+            stack.append(["tpl", 0])
+            out.append(" ")
+            i += 1
+        elif mode == "tpl_expr" and ch == "{":
+            ctx[1] += 1
+            out.append(ch)
+            i += 1
+        elif mode == "tpl_expr" and ch == "}":
+            ctx[1] -= 1
+            if ctx[1] <= 0:
+                stack.pop()
+                out.append(" ")
+            else:
+                out.append(ch)
+            i += 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def _extract_mcp_styles_and_app_script(mcp_html: str) -> tuple[str, str]:
     style_blocks = re.findall(r"<style>([\s\S]*?)</style>", mcp_html, re.IGNORECASE)
     style_text = "\n".join(style_blocks)
     # Only scan custom Compass app JS after the embedded ext-apps/Zod bundle marker.
-    marker = "COMPASS_LOGO_SVG"
-    idx = mcp_html.find(marker)
-    app_script = mcp_html[idx:] if idx != -1 else mcp_html
-    return style_text, app_script
+    for marker in ("var uy=[", "COMPASS_LOGO_SVG"):
+        idx = mcp_html.find(marker)
+        if idx != -1:
+            return style_text, mcp_html[idx:]
+    return style_text, mcp_html
 
 
 def _check_css_motion(
@@ -57,31 +151,52 @@ def _check_css_motion(
     forbidden_props: list[str],
     errors: list[str],
 ) -> None:
+    stripped_css = CSS_COMMENT_RE.sub(" ", css_text)
     for token in required_tokens:
-        if token not in css_text:
+        if token not in stripped_css:
             errors.append(f"[motion-token] {label} is missing required CSS token: {token}")
 
-    if not re.search(r"@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)", css_text, re.IGNORECASE):
+    reduced_match = REDUCED_MOTION_RE.search(stripped_css)
+    if not reduced_match:
         errors.append(f"[reduced-motion] {label} must define @media (prefers-reduced-motion: reduce)")
     else:
-        reduced_tail = re.split(
-            r"@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)",
-            css_text,
-            maxsplit=1,
-            flags=re.IGNORECASE,
-        )[1]
-        if "animation-duration" not in reduced_tail or "transition-duration" not in reduced_tail:
+        reduced_block = _extract_brace_body(stripped_css, reduced_match.end() - 1)
+        if "animation-duration" not in reduced_block or "transition-duration" not in reduced_block:
             errors.append(
                 f"[reduced-motion] {label} reduced-motion block must clamp both animation-duration and transition-duration"
             )
+        if "::view-transition-" in stripped_css and "::view-transition-" not in reduced_block:
+            errors.append(
+                f"[reduced-motion] {label} reduced-motion block must also disable ::view-transition-* animations"
+            )
 
-    stripped_css = CSS_COMMENT_RE.sub(" ", css_text)
     for match in TRANSITION_DECL_RE.finditer(stripped_css):
         decl = match.group(1)
         lowered = decl.lower()
         for prop in [*forbidden_props, "all"]:
             if re.search(rf"(?<![a-z0-9-]){re.escape(prop)}(?![a-z0-9-])", lowered):
                 errors.append(f"[forbidden-transition] {label} animates layout property '{prop}': {decl.strip()[:80]}")
+
+    for kf_match in KEYFRAMES_HEAD_RE.finditer(stripped_css):
+        kf_body = _extract_brace_body(stripped_css, kf_match.end() - 1)
+        for prop in forbidden_props:
+            if re.search(rf"(?<![a-z0-9-]){re.escape(prop)}\s*:", kf_body, re.IGNORECASE):
+                errors.append(f"[forbidden-keyframes] {label} keyframe animates layout property '{prop}'")
+
+
+def _scan_file_copy(
+    repo_root: Path,
+    file_path: Path,
+    banned_terms: list[str],
+    allow_rules: list[dict],
+    errors: list[str],
+) -> None:
+    rel = file_path.relative_to(repo_root).as_posix()
+    text = file_path.read_text(encoding="utf-8", errors="replace")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        hits = [term for term in banned_terms if term in line]
+        if hits and not _is_allowlisted(rel, line, allow_rules):
+            errors.append(f"[banned-copy] {rel}:{lineno} contains legacy term(s) {hits}: {line.strip()[:80]}")
 
 
 def run_gate(repo_root: Path = REPO_ROOT, allowlist_path: Path | None = None) -> list[str]:
@@ -93,20 +208,21 @@ def run_gate(repo_root: Path = REPO_ROOT, allowlist_path: Path | None = None) ->
     errors: list[str] = []
 
     src_root = repo_root / "src" / "project_compass"
+    seen_paths: set[Path] = set()
     if src_root.exists():
         for file_path in sorted(src_root.rglob("*")):
             if not file_path.is_file() or file_path.suffix not in SCAN_SUFFIXES:
                 continue
             if "__pycache__" in file_path.parts:
                 continue
-            rel = file_path.relative_to(repo_root).as_posix()
-            text = file_path.read_text(encoding="utf-8", errors="replace")
-            for lineno, line in enumerate(text.splitlines(), 1):
-                hits = [term for term in banned_terms if term in line]
-                if hits and not _is_allowlisted(rel, line, allow_rules):
-                    errors.append(
-                        f"[banned-copy] {rel}:{lineno} contains legacy term(s) {hits}: {line.strip()[:80]}"
-                    )
+            seen_paths.add(file_path.resolve())
+            _scan_file_copy(repo_root, file_path, banned_terms, allow_rules, errors)
+
+    for rel_extra in EXTRA_COPY_FILES:
+        extra_path = repo_root / rel_extra
+        if extra_path.is_file() and extra_path.resolve() not in seen_paths:
+            seen_paths.add(extra_path.resolve())
+            _scan_file_copy(repo_root, extra_path, banned_terms, allow_rules, errors)
 
     styles_path = src_root / "web" / "styles.css"
     app_js_path = src_root / "web" / "app.js"
@@ -134,7 +250,7 @@ def run_gate(repo_root: Path = REPO_ROOT, allowlist_path: Path | None = None) ->
             forbidden_props,
             errors,
         )
-        sanitized_mcp = STRIP_STRINGS_AND_COMMENTS_RE.sub(" ", mcp_app_script)
+        sanitized_mcp = _strip_js_comments_and_strings(mcp_app_script)
         if BLOCKING_DIALOG_RE.search(sanitized_mcp):
             errors.append("[blocking-dialog] web/mcp_app.html contains forbidden confirm()/alert()/prompt() call")
     else:
@@ -143,7 +259,7 @@ def run_gate(repo_root: Path = REPO_ROOT, allowlist_path: Path | None = None) ->
     for js_or_html, label in ((app_js_path, "web/app.js"), (index_html_path, "web/index.html")):
         if not js_or_html.exists():
             continue
-        sanitized = STRIP_STRINGS_AND_COMMENTS_RE.sub(" ", js_or_html.read_text(encoding="utf-8"))
+        sanitized = _strip_js_comments_and_strings(js_or_html.read_text(encoding="utf-8"))
         if BLOCKING_DIALOG_RE.search(sanitized):
             errors.append(f"[blocking-dialog] {label} contains forbidden confirm()/alert()/prompt() call")
 

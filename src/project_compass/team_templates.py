@@ -26,7 +26,7 @@ _TOKEN_PLACEHOLDER = "fill-your-token-here"
 TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
     "solo": {
         "key": "solo",
-        "label": "个人单兵（本地多会话）",
+        "label": "个人模式（本地多会话）",
         "description": "单人多会话本地并发协作，无需远程成员席位或 HTTP 令牌，通过 session_id 隔离并行窗口。",
         "mode": "solo",
         "owner_id": "owner",
@@ -63,7 +63,7 @@ TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
                 "session_id": "session-qa",
                 "agent": "claude-code",
                 "role_label": "测试与验收席",
-                "role_brief": "负责回归测试、边界排查与缺陷坑位记录",
+                "role_brief": "负责回归测试、边界排查与待修问题记录",
             },
         ),
     },

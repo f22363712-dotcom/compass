@@ -3552,6 +3552,22 @@ details > summary {
     opacity var(--motion-base) var(--ease-out);
 }
 
+details > summary,
+.superseded-todos-fold summary {
+  transition:
+    color var(--motion-fast) var(--ease-in-out),
+    background-color var(--motion-fast) var(--ease-in-out),
+    opacity var(--motion-base) var(--ease-in-out);
+}
+
+.is-fresh-node,
+.evidence-drawer {
+  transition:
+    border-color var(--motion-slow) var(--ease-out),
+    opacity var(--motion-slow) var(--ease-out),
+    transform var(--motion-slow) var(--ease-out);
+}
+
 button:active:not(:disabled),
 .mini-btn:active:not(:disabled),
 .mode-pill:active:not(:disabled),
@@ -3577,7 +3593,7 @@ button:active:not(:disabled),
 }
 
 ::view-transition-old(root) {
-  animation-duration: var(--motion-base);
+  animation-duration: calc(var(--motion-base) * 0.75);
   animation-timing-function: var(--ease-exit);
 }
 
