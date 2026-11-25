@@ -633,6 +633,138 @@ class HostAdapterAndSidecarTests(unittest.TestCase):
                 self.assertFalse(res_cap["result"]["isError"])
             self.assertLessEqual(len(mcp_srv._dynamic_adapters), 3)
 
+    def test_sidecar_hot_reload_helper_and_plugin_bundle_sync(self) -> None:
+        node_exe = shutil.which("node")
+        if not node_exe:
+            self.skipTest("node runtime unavailable")
+
+        repo_root = Path(__file__).resolve().parents[1]
+        sidecar_dir = repo_root / "src" / "project_compass" / "antigravity_plugin" / "compass" / "sidecars" / "compass_board"
+        hot_reload_mjs = sidecar_dir / "hot_reload.mjs"
+        main_mjs = sidecar_dir / "main.mjs"
+        self.assertTrue(hot_reload_mjs.is_file())
+        self.assertTrue(main_mjs.is_file())
+
+        for target in (hot_reload_mjs, main_mjs):
+            chk = subprocess.run([node_exe, "--check", str(target)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(chk.returncode, 0, f"node --check failed for {target}: {chk.stderr}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            installed = install_antigravity_plugin(repo_root, home=fake_home)
+            installed_sidecar = Path(installed["sidecar_manifest"]).parent
+            self.assertTrue((installed_sidecar / "main.mjs").is_file())
+            self.assertTrue((installed_sidecar / "hot_reload.mjs").is_file())
+
+            fake_src = tmp_path / "src"
+            pkg_dir = fake_src / "project_compass"
+            pkg_dir.mkdir(parents=True)
+            mod_file = pkg_dir / "sample_mod.py"
+            mod_file.write_text("VALUE = 1\n", encoding="utf-8")
+            # Ignored subdirs should not contribute to fingerprint.
+            (pkg_dir / "__pycache__").mkdir()
+            (pkg_dir / "__pycache__" / "sample_mod.cpython-312.pyc").write_bytes(b"pyc")
+            (pkg_dir / "web").mkdir()
+            (pkg_dir / "web" / "helper.py").write_text("IGNORED = True\n", encoding="utf-8")
+
+            js_script = r"""
+import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
+const {
+  resolveWatchPackageDir,
+  computePythonSourceFingerprint,
+  createHotReloadTracker,
+} = await import(pathToFileURL(process.argv[1]).href);
+
+const fakeSrc = process.argv[2];
+const modFile = process.argv[3];
+const webIgnoredFile = process.argv[4];
+
+assert.equal(resolveWatchPackageDir({ pythonpath: fakeSrc }, { COMPASS_HOT_RELOAD: '0' }), null);
+const watchDir = resolveWatchPackageDir({ pythonpath: fakeSrc }, {});
+assert.ok(watchDir && watchDir.endsWith('project_compass'));
+
+const fp1 = computePythonSourceFingerprint(watchDir);
+assert.ok(fp1.includes('sample_mod.py:'), `Missing sample_mod.py in ${fp1}`);
+assert.ok(!fp1.includes('web/helper.py'), `Ignored web/ leaked into ${fp1}`);
+
+let fakeNow = 1000;
+const tracker = createHotReloadTracker({ watchDir, throttleMs: 1000, now: () => fakeNow });
+tracker.markLoaded(fp1);
+
+assert.equal(tracker.checkForChange().changed, false);
+fakeNow = 1200; // within throttleMs: even modified web file or non-forced stays clean
+writeFileSync(webIgnoredFile, 'IGNORED = 222\n', 'utf-8');
+assert.equal(tracker.checkForChange({ force: true }).changed, false);
+
+// Modify real .py file (larger content + bumped mtime)
+writeFileSync(modFile, 'VALUE = 123456789\n', 'utf-8');
+assert.equal(tracker.checkForChange({ force: false }).changed, false, 'Expected throttled check inside 1000ms');
+assert.equal(tracker.checkForChange({ force: true }).changed, true, 'Forced check must detect .py modification');
+
+const fp2 = computePythonSourceFingerprint(watchDir);
+assert.notEqual(fp2, fp1);
+tracker.markLoaded(fp2);
+fakeNow = 3000;
+assert.equal(tracker.checkForChange().changed, false);
+
+tracker.markFailed();
+assert.equal(tracker.checkForChange().changed, true, 'markFailed must allow recovery check on next request');
+console.log('SIDECAR_HOT_RELOAD_TEST_OK');
+"""
+            res = subprocess.run(
+                [
+                    node_exe,
+                    "--input-type=module",
+                    "-e",
+                    js_script,
+                    str(hot_reload_mjs),
+                    str(fake_src),
+                    str(mod_file),
+                    str(pkg_dir / "web" / "helper.py"),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            self.assertEqual(res.returncode, 0, f"stdout={res.stdout}\nstderr={res.stderr}")
+            self.assertIn("SIDECAR_HOT_RELOAD_TEST_OK", res.stdout)
+
+    def test_demo_cli_recovers_from_stale_demo_ledger_content_collision(self) -> None:
+        from dataclasses import replace
+        from pathlib import Path
+        import tempfile
+        from unittest.mock import patch
+        from project_compass import cli
+        from project_compass.sample_data import showcase_sample_events
+        from project_compass.project_workspace import ProjectWorkspace
+
+        expected_events = showcase_sample_events()
+        demo_e3 = next(ev for ev in expected_events if ev.id == "demo-e3")
+        stale_e3 = replace(demo_e3, content="stale pre-v1.7 demo-e3 content")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ws_root = Path(tmpdir)
+            sample_ws_dir = ws_root / "demo"
+            synthetic_proj_dir = ws_root / "demo-podcast-clipper"
+            synthetic_proj_dir.mkdir(parents=True, exist_ok=True)
+            stale_ws = ProjectWorkspace(sample_ws_dir, synthetic_proj_dir)
+            stale_ws.save([stale_e3], {"source": "demo", "synthetic": True})
+
+            with patch("project_compass.cli.run_dashboard") as mock_dash:
+                rc = cli.main(
+                    ["--demo", "--web", "--no-browser", "--workspace-root", str(ws_root)]
+                )
+
+            self.assertEqual(rc, 0)
+            mock_dash.assert_called_once()
+            reloaded = ProjectWorkspace(sample_ws_dir, synthetic_proj_dir).load()
+            reloaded_e3 = next(ev for ev in reloaded if ev.id == "demo-e3")
+            self.assertEqual(reloaded_e3.content, demo_e3.content)
+
 
 if __name__ == "__main__":
     unittest.main()

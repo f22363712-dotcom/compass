@@ -5,6 +5,11 @@ import http from 'node:http';
 import { dirname, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SidecarApp, Response } from 'sidecar_sdk';
+import {
+  computePythonSourceFingerprint,
+  createHotReloadTracker,
+  resolveWatchPackageDir,
+} from './hot_reload.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_CONFIG_PATH = join(__dirname, 'runtime_config.json');
@@ -22,7 +27,10 @@ function loadRuntimeConfig() {
 }
 
 const runtimeCfg = loadRuntimeConfig();
+const watchPackageDir = resolveWatchPackageDir(runtimeCfg);
+const hotReload = createHotReloadTracker({ watchDir: watchPackageDir, throttleMs: 1000 });
 const internalSecret = randomBytes(24).toString('hex');
+let activeProjectPath = null;
 let pythonChild = null;
 let backendPort = null;
 let backendPromise = null;
@@ -110,10 +118,12 @@ function spawnBackendChild() {
       (process.platform === 'win32' ? 'python' : 'python3')
     ).trim();
     const initialProject = String(
+      activeProjectPath ||
       process.env.PROJECT_COMPASS_PROJECT_PATH ||
       runtimeCfg.default_project_path ||
       process.cwd()
     ).trim();
+    const launchFingerprint = watchPackageDir ? computePythonSourceFingerprint(watchPackageDir) : '';
     const child = spawn(
       pythonExe,
       ['-u', '-m', 'project_compass.sidecar_backend', '--sidecar-child', '--project-path', initialProject],
@@ -134,6 +144,7 @@ function spawnBackendChild() {
       lineBuf = '';
       consecutiveFailures += 1;
       lastRestartFailureAt = Date.now();
+      hotReload.markFailed();
       backendPromise = null;
       killChild(child);
       reject(new Error(`Compass sidecar backend startup timeout. ${errChunks.join('')}`));
@@ -155,12 +166,14 @@ function spawnBackendChild() {
         consecutiveFailures = 0;
         backendPort = port;
         backendPromise = null;
+        hotReload.markLoaded(launchFingerprint);
         resolve(port);
       } catch (err) {
         settled = true;
         clearTimeout(timer);
         consecutiveFailures += 1;
         lastRestartFailureAt = Date.now();
+        hotReload.markFailed();
         backendPromise = null;
         killChild(child);
         reject(new Error(`Invalid backend handshake line '${line}': ${err.message}`));
@@ -178,6 +191,7 @@ function spawnBackendChild() {
         lineBuf = '';
         consecutiveFailures += 1;
         lastRestartFailureAt = Date.now();
+        hotReload.markFailed();
         backendPromise = null;
         killChild(child);
         reject(err);
@@ -185,7 +199,8 @@ function spawnBackendChild() {
     });
 
     child.on('exit', (code) => {
-      if (pythonChild === child) {
+      const wasCurrentChild = pythonChild === child;
+      if (wasCurrentChild) {
         pythonChild = null;
         backendPort = null;
       }
@@ -195,9 +210,10 @@ function spawnBackendChild() {
         lineBuf = '';
         consecutiveFailures += 1;
         lastRestartFailureAt = Date.now();
+        hotReload.markFailed();
         backendPromise = null;
         reject(new Error(`Compass sidecar backend exited (${code}). ${errChunks.join('')}`));
-      } else if (!shuttingDown) {
+      } else if (!shuttingDown && wasCurrentChild) {
         consecutiveFailures += 1;
         lastRestartFailureAt = Date.now();
       }
@@ -205,11 +221,32 @@ function spawnBackendChild() {
   });
 }
 
-function ensureBackend() {
+function restartBackendForCodeChange() {
+  const oldChild = pythonChild;
+  pythonChild = null;
+  backendPort = null;
+  consecutiveFailures = 0;
+  if (oldChild) {
+    try {
+      oldChild.stdin?.end();
+    } catch {
+      // Ignore already-closed pipe.
+    }
+    setTimeout(() => {
+      killChild(oldChild);
+    }, 400).unref?.();
+  }
+  return ensureBackend({ forceReloadCheck: false });
+}
+
+function ensureBackend({ forceReloadCheck = false } = {}) {
   if (shuttingDown) {
     return Promise.reject(new Error('Compass sidecar is shutting down'));
   }
   if (backendPort && pythonChild && pythonChild.exitCode === null) {
+    if (watchPackageDir && hotReload.checkForChange({ force: forceReloadCheck }).changed) {
+      return restartBackendForCodeChange();
+    }
     return Promise.resolve(backendPort);
   }
   if (backendPromise) {
@@ -240,8 +277,8 @@ function ensureBackend() {
   return promise;
 }
 
-function forwardToBackend(method, pathAndQuery, bodyObj = null) {
-  return ensureBackend().then((port) => new Promise((resolve, reject) => {
+function forwardToBackend(method, pathAndQuery, bodyObj = null, { forceReloadCheck = false } = {}) {
+  return ensureBackend({ forceReloadCheck }).then((port) => new Promise((resolve, reject) => {
     const bodyText = bodyObj !== null ? JSON.stringify(bodyObj) : null;
     const headers = {
       Host: `127.0.0.1:${port}`,
@@ -298,7 +335,7 @@ const app = new SidecarApp();
 for (const pagePath of ['/', '/index.html']) {
   app.page(pagePath, async () => {
     try {
-      const resp = await forwardToBackend('GET', '/');
+      const resp = await forwardToBackend('GET', '/', null, { forceReloadCheck: true });
       let html = resp.body.toString('utf-8');
       if (!html.includes('/preload.js') && html.includes('</head>')) {
         html = html.replace('</head>', '  <script src="/preload.js"></script>\n</head>');
@@ -368,7 +405,18 @@ for (const postRoute of [
 ]) {
   app.api(postRoute, async (data) => {
     try {
-      const resp = await forwardToBackend('POST', postRoute, data || {});
+      const resp = await forwardToBackend('POST', postRoute, data || {}, {
+        forceReloadCheck: postRoute === '/api/refresh',
+      });
+      if (postRoute === '/api/projects/activate' && resp.status < 400) {
+        try {
+          const parsed = JSON.parse(resp.body.toString('utf-8'));
+          const nextPath = String(parsed?.project?.path || data?.path || '').trim();
+          if (nextPath) activeProjectPath = nextPath;
+        } catch {
+          // Ignore non-JSON body.
+        }
+      }
       return new Response(resp.body, {
         contentType: String(resp.headers['content-type'] || 'application/json; charset=utf-8'),
         status: resp.status,

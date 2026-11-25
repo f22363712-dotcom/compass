@@ -271,7 +271,16 @@ def main(argv: list[str] | None = None) -> int:
                 project_workspace = ProjectWorkspace(sample_ws_dir, synthetic_proj_dir)
                 project_path = str(project_workspace.project_path)
                 if args.demo:
-                    project_workspace.save(events, {"source": "demo", "synthetic": True})
+                    try:
+                        project_workspace.save(events, {"source": "demo", "synthetic": True})
+                    except ValueError as exc:
+                        if "already exists with different content" not in str(exc):
+                            raise
+                        import shutil
+
+                        shutil.rmtree(project_workspace.state_path.parent, ignore_errors=True)
+                        project_workspace = ProjectWorkspace(sample_ws_dir, synthetic_proj_dir)
+                        project_workspace.save(events, {"source": "demo", "synthetic": True})
                 elif not project_workspace.exists():
                     project_workspace.save(events, {"source": "sample", "synthetic": True})
                 events = project_workspace.load()
