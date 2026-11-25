@@ -40,10 +40,10 @@
 
 ```bash
 # 方式 A：免预装直接体验（推荐，需要 uv）
-uvx --from git+https://github.com/f22363712-dotcom/compass compass --demo
+uvx --from git+https://github.com/get-compass/compass compass --demo
 
 # 方式 B：克隆源码运行
-git clone https://github.com/f22363712-dotcom/compass.git
+git clone https://github.com/get-compass/compass.git
 cd compass && pip install -e .
 compass --demo
 ```
@@ -84,7 +84,7 @@ compass --demo
 ### 1. 安装（二选一）
 
 ```bash
-git clone https://github.com/f22363712-dotcom/compass.git
+git clone https://github.com/get-compass/compass.git
 cd compass
 pip install -e .
 ```
@@ -132,7 +132,7 @@ compass --open . --extract-docs --with-code-index --web --port 8787
 }
 ```
 
-（若未全局安装，可把 `"command"` 改为 `"uvx"`，`"args"` 为 `["--from", "git+https://github.com/f22363712-dotcom/compass", "compass-mcp", "--project-path", "."]`。）
+（若未全局安装，可把 `"command"` 改为 `"uvx"`，`"args"` 为 `["--from", "git+https://github.com/get-compass/compass", "compass-mcp", "--project-path", "."]`。）
 
 内置 8 个 MCP 工具：
 1. `project_context`：开局或长对话压缩后对齐核心目标、当前下一步、优先执行列表与待确认想法。
