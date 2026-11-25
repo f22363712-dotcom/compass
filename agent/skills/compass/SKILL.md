@@ -30,9 +30,9 @@ Use this skill **only** when the user explicitly invokes `/compass` or asks to o
    - If `ui_delivery.tier == "mcp_app_inline"`: confirm the inline MCP App panel rendered cleanly.
 
 3. **Reply with a concise 4-line Chinese summary** grounded strictly in the returned payload (never fabricate fields or dump raw JSON):
-   - **核心目标**：`<core_goal.text>`（已定案 / 待定 / 待确立）
-   - **下一步共识**：`<next_step.text>`（已定案 / 待定 / 待确立）
-   - **待拍板与分歧**：`待拍板 <pending_items.length> 条 · 分歧 <conflicts.length> 处`
-   - **优先施工队列**：`<priority_dispatches.length> 项（列出首条标题，或“暂无待推进队列”）`
+   - **核心目标**：`<core_goal.text>`（已确认 / 待确认 / 待补充）
+   - **当前下一步**：`<next_step.text>`（已确认 / 待确认 / 待补充）
+   - **待确认与分歧**：`待确认 <active_pending_count> 条（另有 <stale_pending_count> 条超过 72 小时已折叠）· 分歧 <conflicts.length> 处`
+   - **待优先处理**：`<priority_dispatches.length> 项（列出首条标题，或“暂无待优先处理任务”）`
 
 4. **Next interaction**: Briefly note in plain language that clicking mindmap nodes opens evidence timelines and conflict controls, and confirmed work can be sent back into the chat input capsule, sent straight into the active chat, opened in a new thread (in Antigravity sidecar), or queued & copied in standalone browsers.

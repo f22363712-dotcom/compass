@@ -21,7 +21,13 @@
     "采纳",
     "个人路线",
     "团队路线",
-    "脑图"
+    "脑图",
+    "个人单兵",
+    "记一笔",
+    "已舍弃",
+    "搁置",
+    "待核对",
+    "交给 AI"
   ],
   "legacy_term_allowlist": [
     {
@@ -73,11 +79,6 @@
       "path_prefix": "src/project_compass/completion_gate.py",
       "contains": "遗留坑位",
       "why": "Internal supervisor prompt phrasing paired with accepted/pending state."
-    },
-    {
-      "path_prefix": "src/project_compass/team_templates.py",
-      "contains": "缺陷坑位记录",
-      "why": "Existing role brief key retained across template schema compatibility tests."
     }
   ],
   "required_motion_tokens": [

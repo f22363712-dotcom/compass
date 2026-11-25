@@ -259,7 +259,7 @@ def _build_workbench_payload(
     else:
         core_goal = {
             "fact_id": None,
-            "text": "暂未确立核心目标",
+            "text": "暂未设定核心目标",
             "status": "missing",
             "evidence_ids": [],
         }
@@ -287,7 +287,7 @@ def _build_workbench_payload(
             "fact_id": None,
             "kind": "task",
             "completed": False,
-            "text": "等待设定当前下一步…",
+            "text": "暂未设定当前下一步",
             "status": "missing",
             "evidence_ids": [],
         }
@@ -1022,13 +1022,13 @@ class WorkspaceMCPAdapter:
                 review_fn(action, fact_id, reviewer, note)
                 self._cached_context = None
                 if action == "accept_fact":
-                    status_note = "已确认为项目基准"
+                    status_note = "已加入「已确认事项」"
                 elif action == "complete_fact":
                     status_note = "已标记为完成"
                 elif "撤回" in note:
                     status_note = "已移出当前列表（原始记录仍保留）"
                 else:
-                    status_note = "已忽略该条目，不会进入正式基准"
+                    status_note = "已忽略该条目（原始记录仍保留）"
                 return _build_workbench_payload(
                     events,
                     project_path=self.workspace.project_path,

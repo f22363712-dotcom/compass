@@ -1,12 +1,16 @@
-const state = { data: null, lens: "personal", workMode: null, workbenchView: readStorage("compass_workbench_view") === "mindmap" ? "mindmap" : "list", member: null, evidenceQuery: "", layer: "overview", refreshing: false, quickNotePending: false, anchorEditing: null, anchorSaving: false, pendingSignerAction: null, revision: 0, investigationRequest: 0, projectId: null, activeChapterId: null, activeWorkspaceUri: "", inflightWorkspaceUri: "", pendingWorkspaceUri: "", sidecarActivating: false, freshFactIds: new Set(), freshTimer: null, evidenceCache: Object.create(null), evidenceRequestSeq: 0, popoverTimer: null, popoverAnchor: null, popoverCurrentId: null, lastTriggerElement: null, lastModalTrigger: null, lastDrawerTrigger: null, lastDrawerTriggerSpec: null, copyRestoreTimer: null, toastTimer: null, exportTimers: Object.create(null), delayedQueue: new Map(), armTimers: new Map(), armedKeys: new Map(), openDetails: new Set(), lastCopyRetryBrief: "", hasRenderedOnce: false, activeTransition: null };
+const state = { data: null, lens: "personal", workMode: null, workbenchView: readStorage("compass_workbench_view") === "mindmap" ? "mindmap" : "list", member: null, evidenceQuery: "", layer: "overview", refreshing: false, quickNotePending: false, anchorEditing: null, anchorSaving: false, pendingSignerAction: null, revision: 0, investigationRequest: 0, projectId: null, activeChapterId: null, activeWorkspaceUri: "", inflightWorkspaceUri: "", pendingWorkspaceUri: "", sidecarActivating: false, freshFactIds: new Set(), freshTimer: null, evidenceCache: Object.create(null), evidenceRequestSeq: 0, popoverTimer: null, popoverAnchor: null, popoverCurrentId: null, lastTriggerElement: null, lastModalTrigger: null, lastDrawerTrigger: null, lastDrawerTriggerSpec: null, copyRestoreTimer: null, toastTimer: null, toastUndoKey: null, exportTimers: Object.create(null), delayedQueue: new Map(), armTimers: new Map(), armedKeys: new Map(), openDetails: new Set(), lastCopyRetryBrief: "", hasRenderedOnce: false, activeTransition: null };
 
 function renderWithTransition(fn) {
   const reduceMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)")?.matches;
-  const heavyPage = typeof document !== "undefined"
+  const targetCount = state.data ? (activeView()?.facts?.length || 0) : 0;
+  const teamCount = state.lens === "team" ? (state.data?.team?.facts?.length || 0) : 0;
+  const heavyPage = (typeof document !== "undefined"
     && typeof document.querySelectorAll === "function"
-    && (document.querySelectorAll(".fact-card, .review-queue-item, .decision-item, .todo-item, .thinking-branch-node")?.length || 0) > 80;
+    && (document.querySelectorAll(".fact-card, .review-queue-item, .decision-item, .todo-item, .thinking-branch-node")?.length || 0) > 80)
+    || targetCount > 80
+    || teamCount > 80;
   const canTransition = Boolean(
     state.hasRenderedOnce
     && typeof document !== "undefined"
@@ -796,12 +800,16 @@ function showCompassToast(message, options = {}) {
   }
   toast.hidden = !text;
   if (!text) {
+    state.toastUndoKey = null;
+    toast.innerHTML = "";
     toast.textContent = "";
     return;
   }
+  state.toastUndoKey = options?.undoKey || null;
   toast.className = `compass-toast${options?.tone === "error" ? " is-error" : ""}`;
   const actions = Array.isArray(options?.actions) ? options.actions.filter((a) => a && a.label) : [];
   if (!actions.length) {
+    toast.innerHTML = "";
     toast.textContent = text;
   } else {
     if (toast.dataset) toast.dataset.toastMessage = text;
@@ -824,6 +832,7 @@ function showCompassToast(message, options = {}) {
   if (duration > 0) {
     state.toastTimer = makeSafeTimer(() => {
       state.toastTimer = null;
+      state.toastUndoKey = null;
       const cur = document.getElementById("compass-toast");
       if (cur) cur.hidden = true;
     }, duration);
@@ -836,7 +845,9 @@ async function commitDelayedReview(key, commitOptions = {}) {
   entry.committed = true;
   if (entry.timer) clearTimeout(entry.timer);
   state.delayedQueue.delete(key);
+  const hadUndoToast = state.toastUndoKey === key;
   if (entry.projectId && state.projectId && entry.projectId !== state.projectId) {
+    if (hadUndoToast) showCompassToast("");
     return false;
   }
   try {
@@ -848,6 +859,10 @@ async function commitDelayedReview(key, commitOptions = {}) {
     });
     if (payload && !olderState(payload)) {
       state.data = payload;
+    }
+    if (hadUndoToast) {
+      if (commitOptions?.keepalive) showCompassToast("已自动提交刚才的操作", { durationMs: 2500 });
+      else showCompassToast("");
     }
     render();
     invalidateInvestigation(entry.action === "complete_fact" ? "已标记为完成，请重新查询以使用最新状态。" : "记录状态已更新，请重新查询以使用最新状态。");
@@ -911,6 +926,7 @@ function queueDelayedFactReview(factId, action, options = {}) {
       : "已忽略该条记录，保留原始档案（5秒内可撤销）";
   showCompassToast(labelText, {
     durationMs: 5500,
+    undoKey: key,
     actions: [{ label: "撤销", onClick: () => undoDelayedReview(key) }],
   });
 }
@@ -1955,15 +1971,23 @@ async function refreshNative(options = {}) {
         }, 4000);
       }
       state.data = payload;
+      let discardedPendingCount = 0;
       if (projectSwitched && payload.project?.project_id) {
-        if (state.delayedQueue?.size) flushDelayedReviews({ keepalive: true });
+        if (state.delayedQueue?.size) {
+          discardedPendingCount = state.delayedQueue.size;
+          for (const queued of state.delayedQueue.values()) {
+            if (queued?.timer) clearTimeout(queued.timer);
+          }
+          state.delayedQueue.clear();
+          if (state.toastUndoKey) showCompassToast("");
+        }
         state.projectId = payload.project.project_id;
         state.activeWorkspaceUri = payload.project.path || state.activeWorkspaceUri;
         state.evidenceCache = Object.create(null);
       }
       render();
       if (projectSwitched) {
-        showCompassToast?.("检测到工作区切换，已自动同步当前项目");
+        showCompassToast?.(discardedPendingCount ? "检测到工作区切换，已自动同步当前项目（已取消旧项目未提交的延时操作）" : "检测到工作区切换，已自动同步当前项目");
       }
       invalidateInvestigation(projectSwitched ? "检测到工作区切换，请重新提问以使用新项目状态。" : candidatesChanged ? "新候选已更新，原始材料和负责人确认记录保留，请重新提问。" : evidenceChanged ? payload.intake?.new_tool_records ? "已接入工具记录，原有事实与确认历史保留，请重新提问。" : "已接入新消息。原有事实与确认记录保留，新材料需提取后再重新调查。" : "项目状态或负责人确认记录已更新，请重新提问以使用最新状态。");
     } else {

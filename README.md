@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Compass v1.7.0 · 和 AI 一起做项目，不怕聊着聊着忘了目标和决定</strong><br>
+  <strong>Compass v1.7.1 · 和 AI 一起做项目，不怕聊着聊着忘了目标和决定</strong><br>
   左边正常和 Coding Agent 对话写代码，右边实时长出「目标、当前下一步、待选方案对比和避坑记录」。<br>
   100% 纯本地运行（<code>dependencies = []</code>），对话与决策账本只保存在你自己电脑的 <code>.project-memory/</code>。
 </p>
@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache-2.0 License"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.7.0-0d9488?style=flat-square" alt="Version v1.7.0"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-v1.7.1-0d9488?style=flat-square" alt="Version v1.7.1"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/arch-Local--First%20%7C%20Zero--Deps-orange?style=flat-square" alt="Zero Dependencies"></a>
   <a href="server.json"><img src="https://img.shields.io/badge/MCP-8%20Tools%20%7C%20MCP%20App-purple?style=flat-square" alt="MCP 8 Tools and MCP App"></a>
@@ -29,7 +29,7 @@
   <img src="docs/images/compass_hero_demo.gif" alt="Compass 实时分屏协同与防抢跑演示（18 秒循环）" width="100%">
 </p>
 <p align="center">
-  <em>左边照常聊天改代码，右边自动长出思维导图与决策台账；未拍板的脑洞自动隔离，已拍板决定一 click 交给 AI 执行。</em>
+  <em>左边照常聊天改代码，右边自动长出思维导图与决策台账；待确认想法自动隔离，确认后的决定一键发给 AI 执行。</em>
 </p>
 
 ---
@@ -48,7 +48,7 @@ cd compass && pip install -e .
 compass --demo
 ```
 
-运行后会自动打开浏览器看板，你可以直接点选脑图节点、勾选 **「✓ 标记已完成」** 或 **「✓ 确认并交给 AI」**、用全文搜索框直接提问「下一步做什么」。
+运行后会自动打开浏览器看板，你可以直接点选思维导图节点、点击 **「✓ 标记已完成」** 或 **「✓ 确认并发给 AI」**、用全文搜索框直接提问「下一步做什么」。
 
 ---
 
@@ -68,9 +68,9 @@ compass --demo
 
 和 Coding Agent 聊久了做项目，最容易遇到四件事：
 
-| 你经常遇到的抓狂时刻 | 以前 | 用了 **Compass v1.7.0** 之后 |
+| 你经常遇到的抓狂时刻 | 以前 | 用了 **Compass v1.7.1** 之后 |
 | :--- | :--- | :--- |
-| **随口提个备选思路，AI 当圣旨直接改代码** | 对话和代码混在一起，AI 抢跑实现未决方案 | 新想法自动放进「待确认想法」，你点确认或勾选「直接定案」才算正式基准 |
+| **随口提个备选思路，AI 当圣旨直接改代码** | 对话和代码混在一起，AI 抢跑实现未决方案 | 新想法自动放进「待确认想法」，你点确认或勾选「同时标记为已确认」才算正式生效 |
 | **聊到第 20 轮忘了主目标和当前重点** | 目标被几十轮日志和报错淹没，新开窗口就失忆 | 顶部永久固定 **核心目标** + **当前下一步**，做完还能点 **「✓ 标记已完成」** |
 | **之前否决过的方案过两天 AI 又提一遍** | 找不到当时为什么排除，白白返工踩坑 | 明确排除的路线和未核实前提保留原话依据，AI 偏航或重提旧坑会主动提醒 |
 | **跨项目 / 多个窗口开着容易记串** | 全局配置不知道写去了哪 | 每个项目独立存进自己的 `.project-memory/`，支持点击卡片或 `open_compass` 随时核对 |
@@ -142,7 +142,7 @@ compass --open . --extract-docs --with-code-index --web --port 8787
 5. `query_state`：按关键词或自然问题检索项目事实、分歧与证据原文。
 6. `propose_fact`：提交带原文引用的结构化提案（未经人确认保持 `proposed`）。
 7. `open_compass`：按宿主环境自动识别侧栏 / IDE 内置浏览器 / 本机浏览器打开主看板。
-8. `compass_app_action`：供内嵌 MCP App 面板执行确认、搁置、记笔记与派发操作。
+8. `compass_app_action`：供内嵌 MCP App 面板执行确认、忽略、撤回、记一条与发送给 AI。
 
 </details>
 
@@ -151,10 +151,10 @@ compass --open . --extract-docs --with-code-index --web --port 8787
 ## 📸 界面与核心功能一览
 
 <p align="center">
-  <img src="docs/images/board_overview.png" alt="Compass 思维脑图与多模型切换主视图" width="100%">
+  <img src="docs/images/board_overview.png" alt="Compass 思维导图与多模型切换主视图" width="100%">
 </p>
 <p align="center">
-  <em>图 1：主工作台 —— 顶部支持「个人路线 / 团队路线」与可插拔 AI 模式切换，下方默认展开思维导图生长视图</em>
+  <em>图 1：主工作台 —— 顶部支持「个人模式 / 团队协作模式」与可插拔 AI 模式切换，下方默认展开思维导图生长视图</em>
 </p>
 
 <table align="center">

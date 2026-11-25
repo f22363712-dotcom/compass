@@ -94,6 +94,33 @@ button {
             self.assertTrue(any("[blocking-dialog]" in e for e in errors), errors)
             self.assertTrue(any("[forbidden-transition]" in e and "'all'" in e for e in errors), errors)
 
+    def test_rejects_keyframes_layout_prop_readme_copy_and_early_mcp_dialog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._make_clean_fixture_repo(root)
+            (root / "README.md").write_text("个人路线介绍\n", encoding="utf-8")
+            css_path = root / "src" / "project_compass" / "web" / "styles.css"
+            css_path.write_text(
+                css_path.read_text(encoding="utf-8")
+                + "\n@keyframes jump { from { top: 0px; } to { top: 10px; } }\n",
+                encoding="utf-8",
+            )
+            (root / "src" / "project_compass" / "web" / "app.js").write_text(
+                "const x = `hi ${window.confirm('x')}`;\n",
+                encoding="utf-8",
+            )
+            mcp_path = root / "src" / "project_compass" / "web" / "mcp_app.html"
+            mcp_css = (root / "src" / "project_compass" / "web" / "styles.css").read_text(encoding="utf-8").split("@keyframes")[0]
+            mcp_path.write_text(
+                f"<!doctype html><html><head><style>{mcp_css}</style></head><body><script>var uy=[];alert('early');var COMPASS_LOGO_SVG='';</script></body></html>",
+                encoding="utf-8",
+            )
+            errors = ux_gate.run_gate(root)
+            self.assertTrue(any("[banned-copy]" in e and "README.md" in e for e in errors), errors)
+            self.assertTrue(any("[forbidden-keyframes]" in e and "top" in e for e in errors), errors)
+            self.assertTrue(any("[blocking-dialog]" in e and "web/app.js" in e for e in errors), errors)
+            self.assertTrue(any("[blocking-dialog]" in e and "web/mcp_app.html" in e for e in errors), errors)
+
     def test_main_exit_code_matches_gate_status(self) -> None:
         code = ux_gate.main(["--repo-root", str(REPO_ROOT)])
         self.assertEqual(code, 0)

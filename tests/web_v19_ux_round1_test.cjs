@@ -212,6 +212,7 @@ function createV19Harness({ failNextReview = false } = {}) {
     el,
     context,
     requests,
+    setCurState(next) { curState = structuredClone(next); },
     flush: async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); },
   };
 }
@@ -301,6 +302,35 @@ async function main() {
   assert.equal(hErr.el("evidence-drawer").hidden, true, "Error opened interrupting drawer instead of toast");
   assert.equal(hErr.el("compass-toast").hidden, false, "Error did not display toast");
   assert.ok(hErr.el("compass-toast").className.includes("is-error"), "Error toast missing is-error style");
+
+  // 8. P1-1: keepalive flush replaces/clears stale undo toast instead of leaving dead undo button
+  vm.runInContext('queueDelayedFactReview("f-pend", "reject_fact", { fromDrawer: false })', h.context);
+  assert.equal(h.el("compass-toast").hidden, false);
+  assert.ok(h.el("compass-toast").innerHTML.includes("撤销"), "Expected undo button right after queueing reject");
+  const reqBeforeKeepalive = h.requests.filter((r) => r.url === "/api/review").length;
+  await vm.runInContext("flushDelayedReviews({ keepalive: true })", h.context);
+  assert.equal(h.requests.filter((r) => r.url === "/api/review").length, reqBeforeKeepalive + 1, "keepalive flush did not commit");
+  assert.ok(!h.el("compass-toast").innerHTML.includes("撤销"), "Dead undo button remained after keepalive flush");
+
+  // 9. P1-4: passive poll projectSwitched cancels stale delayedQueue instead of posting old fact_id to new project
+  const hSwitch = createV19Harness();
+  await hSwitch.flush();
+  vm.runInContext('queueDelayedFactReview("f-pend", "reject_fact", { fromDrawer: false })', hSwitch.context);
+  assert.equal(vm.runInContext("state.delayedQueue.size", hSwitch.context), 1);
+  const reqBeforeSwitch = hSwitch.requests.filter((r) => r.url === "/api/review").length;
+  hSwitch.setCurState({
+    ...JSON.parse(vm.runInContext("JSON.stringify(state.data)", hSwitch.context)),
+    state_version: 99,
+    project: { project_id: "proj-new-b", name: "New Project B", path: "/tmp/proj-b", read_only: false, evidence_count: 1, fact_count: 1 },
+    personal: {
+      fang: { member_id: "fang", facts: [], evidence_ids: [], directions: { candidates: [], current: [], history: [] }, timeline_chapters: [], thinking_line: { root: { label: "New Goal", status: "proposed", evidence_ids: [] }, branches: [], reversals: [], code_nodes: [] } },
+    },
+    team: { facts: [], evidence_ids: [], conflicts: [], directions: { candidates: [], current: [], history: [] }, timeline_chapters: [], thinking_line: { root: null, branches: [], reversals: [], code_nodes: [] } },
+  });
+  await vm.runInContext("refreshNative({ backgroundPoll: true })", hSwitch.context);
+  assert.equal(vm.runInContext("state.projectId", hSwitch.context), "proj-new-b");
+  assert.equal(vm.runInContext("state.delayedQueue.size", hSwitch.context), 0, "Stale delayedQueue survived projectSwitched");
+  assert.equal(hSwitch.requests.filter((r) => r.url === "/api/review").length, reqBeforeSwitch, "projectSwitched posted old project fact_id to /api/review");
 
   console.log("WEB_V19_UX_ROUND1_PASS");
 }
